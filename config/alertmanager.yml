@@ -1,0 +1,18 @@
+route:
+  receiver: default
+  group_by: [alertname, instance]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 1h
+
+receivers:
+  # Receiver mặc định chưa gửi đi đâu: cảnh báo xem trên giao diện Alertmanager (http://localhost:9093).
+  # Muốn nhận email/webhook: thêm email_configs hoặc webhook_configs ở đây.
+  # KHÔNG ghi mật khẩu/token thật vào file này; không dùng credential sản xuất.
+  - name: default
+
+inhibit_rules:
+  # Khi đã có cảnh báo critical thì bỏ qua warning cùng loại để giảm nhiễu.
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: [alertname, instance]

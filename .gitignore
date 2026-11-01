@@ -1,0 +1,15 @@
+# Bí mật và cấu hình cục bộ - không bao giờ commit
+.env
+*.key
+*.pem
+
+# File tạm của kịch bản mô phỏng
+*.img
+scenarios/textfile/*.prom
+scenarios/textfile/*.prom.tmp
+
+# Hệ điều hành / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

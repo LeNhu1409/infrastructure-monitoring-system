@@ -1,0 +1,67 @@
+groups:
+  # Luật không cần đặt ngưỡng (chỉ xét sống/chết) nên bật sẵn.
+  - name: hkdn-availability
+    rules:
+      - alert: NodeExporterDown
+        expr: up{job="node"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Mất kết nối metric của {{ $labels.instance }}"
+          description: "Prometheus không scrape được {{ $labels.instance }} trong hơn 1 phút."
+
+      - alert: ServiceDown
+        expr: probe_success{job="blackbox-http"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dịch vụ {{ $labels.service }} không phản hồi"
+          description: "Kiểm tra HTTP tới {{ $labels.instance }} thất bại trong hơn 30 giây."
+
+  # Luật theo ngưỡng: CHƯA bật vì chưa có baseline.
+  # Sau khi đo baseline và thống nhất với UTH, mentor VNPT: bỏ dấu "#", thay <NGUONG>
+  # và <THOI_GIAN> bằng giá trị đã chốt, rồi chạy: docker compose restart prometheus
+  #
+  # - name: hkdn-resources
+  #   rules:
+  #     - alert: HighCpuUsage
+  #       expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > <NGUONG>
+  #       for: <THOI_GIAN>
+  #       labels:
+  #         severity: warning
+  #       annotations:
+  #         summary: "CPU cao trên {{ $labels.instance }}"
+  #         description: 'CPU đang dùng {{ $value | printf "%.1f" }}%.'
+  #
+  #     - alert: HighMemoryUsage
+  #       expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > <NGUONG>
+  #       for: <THOI_GIAN>
+  #       labels:
+  #         severity: warning
+  #       annotations:
+  #         summary: "RAM cao trên {{ $labels.instance }}"
+  #         description: 'RAM đang dùng {{ $value | printf "%.1f" }}%.'
+  #
+  #     # Disk thật (chế độ loop của kịch bản 2).
+  #     - alert: DiskSpaceLow
+  #       expr: >
+  #         (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs"}
+  #            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs"}) * 100 > <NGUONG>
+  #       for: <THOI_GIAN>
+  #       labels:
+  #         severity: warning
+  #       annotations:
+  #         summary: "Disk gần đầy tại {{ $labels.mountpoint }}"
+  #         description: 'Phân vùng {{ $labels.mountpoint }} đã dùng {{ $value | printf "%.1f" }}%.'
+  #
+  #     # Disk giả lập qua textfile collector (chế độ textfile của kịch bản 2).
+  #     - alert: DiskSpaceLowSimulated
+  #       expr: hkdn_sim_disk_used_percent > <NGUONG>
+  #       for: <THOI_GIAN>
+  #       labels:
+  #         severity: warning
+  #       annotations:
+  #         summary: "Disk giả lập đầy tại {{ $labels.mountpoint }}"
+  #         description: 'Giá trị mô phỏng {{ $value | printf "%.0f" }}%.'

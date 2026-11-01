@@ -1,0 +1,5 @@
+# Giữ LF cho script/cấu hình để chạy được trong Docker/WSL dù clone trên Windows
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
