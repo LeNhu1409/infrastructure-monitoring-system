@@ -1,0 +1,91 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="Kien-truc-giam-sat-v2" id="arch-v2">
+    <mxGraphModel dx="1836" dy="971" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1500" pageHeight="800" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="win" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=10;fontStyle=1;fillColor=#f5f5f5;strokeColor=#666666;" value="Máy Windows (host)" vertex="1">
+          <mxGeometry height="650" width="1180" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=10;fontStyle=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Docker Desktop (VM Linux / WSL2)" vertex="1">
+          <mxGeometry height="595" width="1140" x="40" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="compose" parent="1" style="rounded=1;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=10;dashed=1;fillColor=#ffffff;strokeColor=#6c8ebf;" value="Docker Compose project: infrastructure-monitoring-system (mạng bridge mặc định, gọi nhau bằng tên service)" vertex="1">
+          <mxGeometry height="545" width="1100" x="60" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="textfile" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="scenarios/textfile&lt;br&gt;(disk giả lập, bind mount)" vertex="1">
+          <mxGeometry height="55" width="180" x="90" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="node" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;node-exporter&lt;/b&gt;&lt;br&gt;:9100 (nội bộ)&lt;br&gt;CPU, RAM, disk, network, uptime" vertex="1">
+          <mxGeometry height="70" width="180" x="90" y="225" as="geometry" />
+        </mxCell>
+        <mxCell id="cadvisor" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;cAdvisor&lt;/b&gt;&lt;br&gt;:8080 (ra host)&lt;br&gt;metric từng container" vertex="1">
+          <mxGeometry height="70" width="180" x="90" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="blackbox" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="&lt;b&gt;blackbox-exporter&lt;/b&gt;&lt;br&gt;:9115 (nội bộ)&lt;br&gt;probe HTTP (http_2xx)" vertex="1">
+          <mxGeometry height="70" width="180" x="90" y="415" as="geometry" />
+        </mxCell>
+        <mxCell id="demo" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="&lt;b&gt;demo-web (nginx)&lt;/b&gt;&lt;br&gt;:80 nội bộ, :8081 ra host&lt;br&gt;dịch vụ bị giám sát" vertex="1">
+          <mxGeometry height="70" width="180" x="90" y="530" as="geometry" />
+        </mxCell>
+        <mxCell id="prom" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="&lt;b&gt;Prometheus&lt;/b&gt;&lt;br&gt;:9090 (ra host)&lt;br&gt;scrape_interval 15s&lt;br&gt;evaluation_interval 15s&lt;br&gt;retention 15 ngày" vertex="1">
+          <mxGeometry height="130" width="210" x="420" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="rules" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="alert.rules.yml&lt;br&gt;hkdn-availability (bật): NodeExporterDown 1m, ServiceDown 30s&lt;br&gt;hkdn-resources (comment, chờ baseline)" vertex="1">
+          <mxGeometry height="90" width="250" x="400" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="am" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;Alertmanager&lt;/b&gt;&lt;br&gt;:9093 (ra host)&lt;br&gt;group_wait 10s" vertex="1">
+          <mxGeometry height="75" width="190" x="760" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="recv" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="Receiver: default&lt;br&gt;(chưa gửi ra ngoài,&lt;br&gt;xem trên UI)" vertex="1">
+          <mxGeometry height="75" width="140" x="1000" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="grafana" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="&lt;b&gt;Grafana&lt;/b&gt;&lt;br&gt;:3000 (ra host)&lt;br&gt;dashboard theo host/service&lt;br&gt;+ lịch sử cảnh báo (ALERTS)" vertex="1">
+          <mxGeometry height="90" width="190" x="760" y="335" as="geometry" />
+        </mxCell>
+        <mxCell id="prov" parent="1" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" value="grafana/provisioning&lt;br&gt;+ dashboards/ (bind mount)" vertex="1">
+          <mxGeometry height="60" width="190" x="760" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="user" parent="1" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" value="Người dùng&lt;br&gt;(trình duyệt)" vertex="1">
+          <mxGeometry height="80" width="40" x="1260" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="prom" style="endArrow=classic;html=1;" target="node" value="scrape 15s (pull)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="prom" style="endArrow=classic;html=1;" target="cadvisor" value="scrape 15s :8080">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="prom" style="endArrow=classic;html=1;" target="blackbox" value="/probe :9115">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="blackbox" style="endArrow=classic;html=1;" target="demo" value="GET http://demo-web:80">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="textfile" style="endArrow=classic;html=1;dashed=1;" target="node" value="đọc textfile">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="rules" style="endArrow=classic;html=1;dashed=1;" target="prom" value="đánh giá luật (mount :ro)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="prom" style="endArrow=classic;html=1;" target="am" value="đẩy cảnh báo :9093">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="am" style="endArrow=classic;html=1;" target="recv" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" edge="1" parent="1" source="grafana" style="endArrow=classic;html=1;" target="prom" value="PromQL :9090">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" edge="1" parent="1" source="prov" style="endArrow=classic;html=1;dashed=1;" target="grafana" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" edge="1" parent="1" source="user" style="endArrow=classic;html=1;" target="grafana" value="HTTP :3000">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="note" parent="1" style="text;html=1;whiteSpace=wrap;fontSize=11;fontStyle=2;" value="Ghi chú: node-exporter chạy bridge trong Docker Desktop nên metric network là của container; muốn đo host Windows cần thêm windows_exporter (:9182, tùy chọn)." vertex="1">
+          <mxGeometry height="50" width="440" x="700" y="570" as="geometry" />
+        </mxCell>
+      <mxCell id="title" parent="1" style="text;html=1;align=right;verticalAlign=middle;fontSize=13;" value="&lt;b&gt;Kiến trúc hệ thống giám sát N4.7 - v2 - 05/11/2026&lt;/b&gt;" vertex="1"><mxGeometry x="640" y="22" width="540" height="26" as="geometry" /></mxCell><mxCell id="vol_prom" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="volume&lt;br&gt;prometheus-data" vertex="1"><mxGeometry x="445" y="195" width="160" height="60" as="geometry" /></mxCell><mxCell id="vol_am" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="volume&lt;br&gt;alertmanager-data" vertex="1"><mxGeometry x="790" y="250" width="130" height="60" as="geometry" /></mxCell><mxCell id="vol_graf" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=8;fontSize=11;fillColor=#f5f5f5;strokeColor=#666666;" value="volume&lt;br&gt;grafana-data" vertex="1"><mxGeometry x="985" y="270" width="150" height="60" as="geometry" /></mxCell><mxCell id="v1" edge="1" parent="1" source="vol_prom" target="prom" style="endArrow=classic;html=1;dashed=1;" value="lưu TSDB"><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="v2" edge="1" parent="1" source="vol_am" target="am" style="endArrow=classic;html=1;dashed=1;" value=""><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="v3" edge="1" parent="1" source="vol_graf" target="grafana" style="endArrow=classic;html=1;dashed=1;" value=""><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="userports" parent="1" style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;" value="Truy cập qua localhost:&lt;br&gt;:3000 Grafana&lt;br&gt;:9090 Prometheus UI&lt;br&gt;:9093 Alertmanager UI&lt;br&gt;:8080 cAdvisor&lt;br&gt;:8081 demo-web" vertex="1"><mxGeometry x="1225" y="440" width="200" height="100" as="geometry" /></mxCell><mxCell id="legend" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;align=left;spacingLeft=6;fontSize=11;fillColor=#ffffff;strokeColor=#666666;" value="&lt;b&gt;Chú giải&lt;/b&gt;" vertex="1"><mxGeometry x="1000" y="400" width="150" height="150" as="geometry" /></mxCell><mxCell id="lg0" parent="1" style="rounded=0;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" value="" vertex="1"><mxGeometry x="1008" y="427" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt0" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Exporter" vertex="1"><mxGeometry x="1026" y="424" width="120" height="18" as="geometry" /></mxCell><mxCell id="lg1" parent="1" style="rounded=0;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="" vertex="1"><mxGeometry x="1008" y="447" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt1" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Prometheus" vertex="1"><mxGeometry x="1026" y="444" width="120" height="18" as="geometry" /></mxCell><mxCell id="lg2" parent="1" style="rounded=0;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" value="" vertex="1"><mxGeometry x="1008" y="467" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt2" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Alertmanager, Grafana" vertex="1"><mxGeometry x="1026" y="464" width="120" height="18" as="geometry" /></mxCell><mxCell id="lg3" parent="1" style="rounded=0;html=1;fillColor=#f8cecc;strokeColor=#b85450;" value="" vertex="1"><mxGeometry x="1008" y="487" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt3" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Dịch vụ bị giám sát" vertex="1"><mxGeometry x="1026" y="484" width="120" height="18" as="geometry" /></mxCell><mxCell id="lg4" parent="1" style="rounded=0;html=1;dashed=1;fillColor=#fff2cc;strokeColor=#d6b656;" value="" vertex="1"><mxGeometry x="1008" y="507" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt4" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Config / kịch bản" vertex="1"><mxGeometry x="1026" y="504" width="120" height="18" as="geometry" /></mxCell><mxCell id="lg5" parent="1" style="rounded=0;html=1;fillColor=#f5f5f5;strokeColor=#666666;" value="" vertex="1"><mxGeometry x="1008" y="527" width="14" height="12" as="geometry" /></mxCell><mxCell id="lgt5" parent="1" style="text;html=1;align=left;verticalAlign=middle;fontSize=10;" value="Volume lưu dữ liệu" vertex="1"><mxGeometry x="1026" y="524" width="120" height="18" as="geometry" /></mxCell></root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
