@@ -1,60 +1,77 @@
-# Runbook xử lý cảnh báo
+# Runbook xử lý cảnh báo (Đề tài N4.7)
 
 Cách dùng: xem tên cảnh báo trên Alertmanager (http://localhost:9093) hoặc Grafana, rồi tìm mục tương ứng bên dưới. Lệnh dưới đây chạy trên máy/VM lab.
 
-## Quy trình chung
+## 1. Tổng quan và Nguyên tắc vận hành
+- **Mục đích tài liệu:** Hướng dẫn quy trình tra cứu, xác minh và xử lý từng bước khi hệ thống giám sát phát sinh cảnh báo.
+- **Các cổng dịch vụ tra cứu trong phòng lab:**
+  - Giao diện theo dõi biểu đồ (Grafana): `http://localhost:3000`
+  - Giao diện quản lý cảnh báo (Alertmanager): `http://localhost:9093`
+  - Giao diện kiểm tra trạng thái thu thập dữ liệu (Prometheus): `http://localhost:9090`
+  - Giao diện tài nguyên container (cAdvisor): `http://localhost:8080`
+  - Dịch vụ web mẫu bị giám sát (Demo Web): `http://localhost:8081`
+- **Nguyên tắc an toàn thông tin:**
+  - Mọi thao tác kiểm tra và khôi phục chỉ thực hiện trên môi trường Docker Compose của nhóm.
+  - Không sử dụng mật khẩu, token sản xuất và không kết nối tới hạ tầng thật của VNPT.
 
-1. **Xác nhận**: cảnh báo còn `firing` không? Mở dashboard "HKDN N4.7 - Host & Service Overview" xem biểu đồ quanh thời điểm cảnh báo.
-2. **Khoanh vùng**: lỗi ở host, container hay dịch vụ?
-3. **Xử lý** theo mục tương ứng.
-4. **Ghi nhận**: giờ phát hiện, nguyên nhân, cách xử lý, giờ hết cảnh báo (ghi vào biên bản/nhật ký của nhóm).
+## 2. Quy trình xử lý cảnh báo tiêu chuẩn
+- **Bước 1 – Tiếp nhận và Xác nhận (Acknowledge):**
+  - Kiểm tra trạng thái cảnh báo (`pending` hay `firing`) trên Alertmanager và bảng lịch sử cảnh báo của Grafana.
+  - Quan sát biểu đồ host/service xung quanh mốc thời gian phát sinh sự cố.
+- **Bước 2 – Khoanh vùng và Phân loại (Triage):**
+  - Xác định lỗi nằm ở tầng máy chủ (Host), tầng Container hay tầng dịch vụ HTTP (Endpoint).
+  - Đối chiếu Mục "Hướng dẫn nhận diện và xử lý Cảnh báo giả" để phân biệt sự cố thật với cảnh báo giả (False Positive).
+- **Bước 3 – Xử lý và Khôi phục (Mitigate & Recover):**
+  - Thực hiện câu lệnh kiểm tra nguyên nhân và lệnh khắc phục theo từng kịch bản tại Mục "Hướng dẫn xử lý chi tiết theo từng kịch bản sự cố".
+- **Bước 4 – Xác nhận hoàn tất và Ghi nhận (Verify & Post-mortem):**
+  - Kiểm tra metric trở về ngưỡng bình thường, cảnh báo tự tắt (`resolved`) và ghi thông tin vào biểu mẫu tại Mục "Biểu mẫu ghi nhận nhật ký xử lý sự cố".
 
-## NodeExporterDown (critical)
+## 3. Danh mục cảnh báo và Ngưỡng kích hoạt
+*(Cập nhật sau - từ file `config/alert.rules.yml`)*
+- **Các trường thông tin sẽ trình bày trong bảng danh mục:**
+  - Tên luật cảnh báo (`alertname`) và nhóm luật (`hkdn-availability` / `hkdn-resources`).
+  - Mức độ nghiêm trọng (`warning` hoặc `critical`).
+  - Đối tượng và chỉ số metric được giám sát.
+  - Ngưỡng kích hoạt (sau baseline) và thời gian duy trì điều kiện (`for:`).
 
-- **Ý nghĩa**: Prometheus không lấy được metric của host trong hơn 1 phút.
-- **Kiểm tra**: `docker compose ps`, `docker logs hkdn-node-exporter --tail 50`, vào http://localhost:9090/targets xem lỗi.
-- **Xử lý**: `docker compose restart node-exporter`. Nếu cả host chết thì kiểm tra VM/máy lab.
-- **Có thể là cảnh báo giả khi**: vừa khởi động lại lab hoặc đang bảo trì.
+## 4. Hướng dẫn xử lý chi tiết theo từng kịch bản sự cố
+*(Cập nhật sau - đồng bộ câu lệnh thực nghiệm từ thư mục `scenarios/`)*
 
-> Các cảnh báo CPU, RAM, disk bên dưới chỉ hoạt động sau khi nhóm bật luật tương ứng trong `config/alert.rules.yml`.
+### Khung trình bày thống nhất cho mỗi kịch bản cảnh báo:
+- **Ý nghĩa và nguyên nhân:** Giải thích hiện tượng kỹ thuật dẫn đến cảnh báo.
+- **Dấu hiệu nhận biết:** Trạng thái hiển thị trên Alertmanager và panel tương ứng trên Grafana.
+- **Cách kiểm tra xác minh:** Danh sách câu lệnh kiểm tra log, tiến trình và trạng thái container.
+- **Thao tác xử lý khôi phục:** Các câu lệnh khắc phục sự cố và khởi động lại dịch vụ.
+- **Tiêu chí đóng sự cố:** Dấu hiệu xác nhận hệ thống đã khôi phục hoàn toàn.
 
-## HighCpuUsage (warning)
+### Danh sách các kịch bản sẽ biên soạn chi tiết:
+- **Nhóm cảnh báo độ khả dụng (Availability):**
+  - Cảnh báo mất kết nối thu thập metric máy chủ (`NodeExporterDown`).
+  - Cảnh báo sập dịch vụ / Endpoint HTTP không phản hồi (`ServiceDown` – Kịch bản lỗi số 3).
+- **Nhóm cảnh báo tài nguyên hệ thống (Resources):**
+  - Cảnh báo quá tải vi xử lý (`HighCpuUsage` – Kịch bản lỗi số 1).
+  - Cảnh báo đầy ổ đĩa giả lập (`DiskSpaceLow` / `DiskSpaceLowSimulated` – Kịch bản lỗi số 2).
+  - Cảnh báo mức sử dụng bộ nhớ RAM cao (`HighMemoryUsage`).
 
-- **Ý nghĩa**: CPU trung bình vượt ngưỡng liên tục trong một khoảng thời gian (ngưỡng chưa chốt, chờ baseline).
-- **Kiểm tra**: `docker stats --no-stream` hoặc panel "CPU theo container" để thấy container nào ngốn CPU; `top` trên host.
-- **Xử lý**: dừng/giới hạn container gây tải (`docker update --cpus 1 <tên>`), tìm nguyên nhân gốc (vòng lặp, tải tăng đột biến).
-- **Có thể là cảnh báo giả khi**: tăng ngắn do build/khởi động; tăng `for:` hoặc dùng trung bình dài hơn nếu lặp lại nhiều.
+## 5. Hướng dẫn nhận diện và xử lý Cảnh báo giả (False Positive)
+*(Phối hợp nội dung cùng phần Cảnh báo và Kịch bản cảnh báo giả)*
+- **Dấu hiệu nhận biết cảnh báo giả:**
+  - Tăng tải đột biến ngắn hạn (chỉ lên trạng thái `pending` rồi tự hạ, không chuyển sang `firing`).
+  - Cảnh báo xuất hiện đồng loạt do khởi động lại phòng lab hoặc gián đoạn mạng nội bộ Docker.
+  - Cảnh báo dao động bật/tắt liên tục do ngưỡng đặt quá sát mức baseline.
+  - Cảnh báo phát sinh từ metric mô phỏng (`hkdn_sim_*`) trong quá trình chạy kiểm thử.
+- **Hướng xử lý đối với cảnh báo giả:**
+  - Quy trình kiểm tra chéo trước khi can thiệp vào container.
+  - Cách tạo lệnh tạm ẩn thông báo (`Silence`) có thời hạn trên Alertmanager khi bảo trì/kiểm thử.
+  - Quy trình đề xuất điều chỉnh lại ngưỡng hoặc thời gian chờ `for:` trong `config/alert.rules.yml`.
 
-## HighMemoryUsage (warning)
-
-- **Ý nghĩa**: RAM dùng vượt ngưỡng trong một khoảng thời gian (ngưỡng chưa chốt, chờ baseline).
-- **Kiểm tra**: `free -h`, panel "RAM theo container", `docker stats --no-stream`.
-- **Xử lý**: khởi động lại hoặc đặt giới hạn bộ nhớ cho container ngốn RAM (`mem_limit`), kiểm tra rò rỉ bộ nhớ.
-- **Có thể là cảnh báo giả khi**: cache hệ điều hành lớn; dùng `MemAvailable` (đã dùng) thay vì `MemFree`.
-
-## DiskSpaceLow / DiskSpaceLowSimulated (warning)
-
-- **Ý nghĩa**: phân vùng đã dùng vượt ngưỡng (ngưỡng chưa chốt, chờ baseline). `Simulated` là bản dùng cho kịch bản giả lập.
-- **Kiểm tra**: `df -h`, `du -xh --max-depth=1 <mountpoint> | sort -h | tail`, `docker system df`.
-- **Xử lý**: dọn file lớn/log cũ, `docker system prune` (cẩn thận, hỏi nhóm trước), mở rộng ổ nếu cần.
-- **Có thể là cảnh báo giả khi**: là metric `hkdn_sim_*` (giả lập) hoặc phân vùng chỉ đọc luôn đầy (squashfs, loop của snap); thêm vào bộ lọc `fstype`.
-
-## ServiceDown (critical)
-
-- **Ý nghĩa**: kiểm tra HTTP tới dịch vụ thất bại hơn 30 giây.
-- **Kiểm tra**: `docker ps -a | grep demo-web`, `docker logs hkdn-demo-web --tail 50`, `curl -i http://localhost:8081`, http://localhost:9090/targets (job `blackbox-http`).
-- **Xử lý**: `docker start hkdn-demo-web` (hoặc `docker compose up -d demo-web`), xem log tìm nguyên nhân.
-- **Có thể là cảnh báo giả khi**: Blackbox Exporter lỗi mạng nội bộ chứ dịch vụ vẫn sống. Kiểm tra bằng `curl` trực tiếp và xem `probe_success` có đồng loạt về 0 cho mọi dịch vụ không.
-
-## Cách phân biệt cảnh báo giả
-
-| Dấu hiệu | Khả năng | Việc làm |
-|---|---|---|
-| Chỉ `pending`, tự hết trong vài chục giây | Tăng ngắn, đúng cơ chế `for:` | Không cần xử lý; cân nhắc tăng `for:` nếu lặp lại |
-| Nhiều cảnh báo cùng lúc, cùng giờ | Sự cố chung (mạng, Prometheus, host) hoặc vừa khởi động lại | Kiểm tra `up` và http://localhost:9090/targets trước |
-| Metric có tiền tố `hkdn_sim_` | Do kịch bản giả lập | Đối chiếu `scenarios/results/events.log` |
-| Cảnh báo lặp, dao động quanh ngưỡng | Ngưỡng sát giá trị thường ngày | Đo baseline, chỉnh ngưỡng hoặc `for:` |
-| Cảnh báo đúng giờ bảo trì | Bảo trì có kế hoạch | Tạm tắt (silence) trên Alertmanager, có thời hạn |
+## 6. Biểu mẫu ghi nhận nhật ký xử lý sự cố (Incident Log)
+- **Các cột thông tin cần ghi nhận khi diễn tập và demo:**
+  - Số thứ tự và Thời điểm phát hiện cảnh báo.
+  - Tên cảnh báo và Phân loại (Sự cố thật / Cảnh báo giả / Chạy kịch bản test).
+  - Nguyên nhân gốc xác định được.
+  - Câu lệnh / Thao tác đã thực hiện để khôi phục.
+  - Thời điểm cảnh báo kết thúc (`resolved`) và Người thực hiện.
 
 ## Lưu ý an toàn
 
