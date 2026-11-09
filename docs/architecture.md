@@ -64,25 +64,25 @@ Nguyên tắc: không đặt ngưỡng tùy ý trước khi đo. Baseline đư�
 
 Tái lập (chạy từ thư mục gốc repo, lab đã chạy ổn định và chưa bơm lỗi):
 
-    python tools\Baseline\baseline.py --hours 4 --step 15 --out docs\baseline_result.md
+    python tools\Baseline\baseline.py --hours 24 --step 15 --out docs\baseline_result.md
 
-**Phạm vi đo:** 4 giờ, từ 09:14 đến 13:14 UTC ngày 06/11/2026 (16:14 đến 20:14 giờ Việt Nam), 961 mẫu mỗi chuỗi, step 15s. Lab nhàn rỗi, không chạy kịch bản trong khoảng đo. Đây là **baseline sơ bộ**, chưa phủ chu kỳ ngày. Hai lần đo trước đó (5,3 giờ và 7,9 giờ dữ liệu) cho kết quả tương tự (CPU p50 0,245% và 0,230%, RAM 13 đến 15%), cho thấy baseline lặp lại ổn định.
+**Phạm vi đo:** 24 giờ liên tục, từ 05:56 UTC ngày 08/11/2026 đến 05:56 UTC ngày 09/11/2026 (12:56 ngày 08/11 đến 12:56 ngày 09/11 giờ Việt Nam, tức chiều Chủ nhật đến trưa thứ Hai), 5761 mẫu mỗi chuỗi (đủ, không đứt đoạn), step 15s. Lab nhàn rỗi, không chạy kịch bản và không khởi động lại container trong khoảng đo. Baseline phủ một chu kỳ ngày (có cả ban đêm) nhưng chỉ một ngày duy nhất. Kết quả khớp với lần đo 4 giờ trước đó (09:14 đến 13:14 UTC ngày 06/11: CPU p50 0,254%, RAM p99 15,1%), cho thấy baseline lặp lại ổn định.
 
 | Chỉ số | avg | p50 | p99 | max | Nhận xét |
 |---|---|---|---|---|---|
-| CPU (%) | 0,270 | 0,254 | 0,395 | 5,736 | Lab gần như rảnh, chỉ có đỉnh ngắn 5,7% |
-| RAM (%) | 14,261 | 14,225 | 15,068 | 15,311 | Dao động hẹp (~13 đến 15%) |
-| Disk `/var/lib` (%) | 7,577 | 7,577 | 7,579 | 7,579 | Gần như không đổi nên phân vị không có ý nghĩa |
+| CPU (%) | 0,261 | 0,262 | 0,443 | 3,517 | Lab gần như rảnh, chỉ có đỉnh ngắn 3,5% |
+| RAM (%) | 15,383 | 15,646 | 16,443 | 17,091 | Dao động hẹp (~15 đến 17%) |
+| Disk `/var/lib` (%) | 7,587 | 7,587 | 7,591 | 7,592 | Gần như không đổi nên phân vị không có ý nghĩa |
 | Network nhận (B/s) | 41,6 | 41,6 | 41,6 | 42,5 | Lưu lượng gần bằng 0, là của VM Docker Desktop |
-| Network gửi (B/s) | 1013,8 | 1013,4 | 1017,4 | 1018,2 | Như trên |
-| Thời gian probe demo-web (s) | 0,002 | 0,002 | 0,003 | 0,004 | Probe thành công 100% (UP) |
+| Network gửi (B/s) | 1025,4 | 1025,8 | 1029,4 | 1031,9 | Như trên |
+| Thời gian probe demo-web (s) | 0,002 | 0,002 | 0,003 | 0,099 | Probe thành công 100% (UP); max 0,099 s là đỉnh hiếm gặp (p99 vẫn 0,003 s) |
 
 **Ngưỡng đề xuất (bản nháp, chờ thống nhất với UTH và mentor VNPT):**
 
 | Chỉ số | Warning | Critical | `for:` | Cơ sở |
 |---|---|---|---|---|
 | CPU | 70% | 90% | 2m | Baseline rất thấp nên có khoảng dư lớn, ngưỡng theo mức vận hành thông thường. `for:` cân bằng giữa phát hiện nhanh và cảnh báo giả (kết quả NAB cho thấy `for:` dài làm mất đỉnh ngắn), kiểm chứng bằng kịch bản cảnh báo giả (CPU 30 giây không được `firing`) |
-| RAM | 80% | 90% | 5m | Baseline p99 15,1%, dư gấp nhiều lần |
+| RAM | 80% | 90% | 5m | Baseline p99 16,4%, dư gấp nhiều lần |
 | Disk | 80% | 90% | 5m | Giá trị gần như không đổi nên dùng ngưỡng tuyệt đối; chỉ xét mountpoint `/var/lib` (và `/mnt/hkdn-small-disk` cho chế độ `loop`), nhóm cần xác nhận |
 | Disk giả lập | 80% | | 1m | Kịch bản ghi giá trị 92; `for:` 1 phút để kịp `firing` trong 300 giây chạy |
 | ServiceDown | `probe_success == 0` | | 30s | Probe UP 100% trong thời gian đo |
@@ -93,7 +93,7 @@ Baseline cho biết khoảng dư rất lớn nên không suy ra trực tiếp đ
 
 **Lưu ý khi đọc baseline:**
 - Node Exporter chạy trong Docker Desktop (WSL2) nên số đo là của VM, không phải máy Windows.
-- Bảng disk trong `docs/baseline_result.md` có nhiều dòng trùng do Docker Desktop mount cùng một ổ nhiều lần (`/mnt/host/...`, `/parent-distro/...`, `/run/desktop/...`). Luật disk cần giới hạn theo mountpoint cụ thể (nhóm sẽ chốt), để tránh cảnh báo trùng. Ổ C (~63,1%) và ổ D (~78,8%) là ổ của máy Windows, nằm ngoài phạm vi giám sát của lab; ổ D sát ngưỡng warning 80% nên không được đưa vào luật.
+- Bảng disk trong `docs/baseline_result.md` có nhiều dòng trùng do Docker Desktop mount cùng một ổ nhiều lần (`/mnt/host/...`, `/parent-distro/...`, `/run/desktop/...`). Luật disk cần giới hạn theo mountpoint cụ thể (nhóm sẽ chốt), để tránh cảnh báo trùng. Ổ C (~64%) và ổ D (~79%) là ổ của máy Windows, nằm ngoài phạm vi giám sát của lab; ổ D sát ngưỡng warning 80% nên không được đưa vào luật.
 - Các bảng CPU/RAM theo container đang không có dữ liệu: cAdvisor trên Docker Desktop báo lỗi đọc lớp image của container, đang xử lý.
 
 ## Kiểm chứng phương pháp đặt ngưỡng bằng NAB
@@ -132,7 +132,7 @@ Lưu ý khi dùng kết quả:
 ## Hạn chế và bước tiếp theo
 
 **Hạn chế:**
-- Baseline sơ bộ trên 4 giờ dữ liệu (961 mẫu mỗi chuỗi), chưa phủ chu kỳ ngày.
+- Baseline đo trong 24 giờ liên tục (5761 mẫu mỗi chuỗi) nhưng chỉ một ngày (chiều Chủ nhật đến trưa thứ Hai), chưa phủ ngày thường và cuối tuần.
 - Lab gần như không có tải, nên baseline chỉ cho biết khoảng dư lớn, chưa phản ánh tải thực của máy chủ.
 - Số đo là của VM Docker Desktop (WSL2), không phải máy Windows hay máy chủ thật.
 - Metric theo container (cAdvisor) chưa có dữ liệu trên Docker Desktop nên panel CPU/RAM theo container đang trống.
@@ -141,7 +141,7 @@ Lưu ý khi dùng kết quả:
 - Prototype một máy, không có HA, dữ liệu Prometheus lưu 15 ngày.
 
 **Bước tiếp theo:**
-- Đo lại baseline khi lab chạy đủ 24 giờ, loại đoạn chạy kịch bản, chốt ngưỡng cùng UTH và mentor VNPT.
+- Chốt ngưỡng cùng UTH và mentor VNPT; nếu còn thời gian, đo thêm vài ngày (gồm ngày thường và cuối tuần), loại đoạn chạy kịch bản.
 - Chạy mỗi kịch bản 3 lần, ghi thời gian phát hiện và minh chứng vào `scenarios/results.md`.
 - Chốt mountpoint disk cho luật và dashboard, sửa panel container (cAdvisor).
 - Cân nhắc ngưỡng động (theo trung bình trượt, độ lệch chuẩn) hoặc dự báo bằng Python cho CPU, disk.
