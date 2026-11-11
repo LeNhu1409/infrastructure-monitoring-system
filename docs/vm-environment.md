@@ -24,6 +24,9 @@ Mở http://localhost:9090/targets: ngoài các target cũ phải có `192.168.5
 
 Nếu Prometheus trong Docker không tới được `192.168.56.x`: kiểm tra `ping 192.168.56.11` từ máy host trước; trên Docker Desktop, container đi ra qua máy host nên thường tới được. Nếu vẫn không, báo lại để đổi sang cách khác (ví dụ bridged network).
 
+## Lưu ý Node Exporter của Ubuntu
+Bản cài bằng `apt` mặc định loại trừ mọi mountpoint dưới `/mnt` và `/media`. `vagrant/provision/common.sh` ghi đè tham số `--collector.filesystem.mount-points-exclude` để ổ thử của kịch bản disk (`/mnt/hkdn-small-disk`) được giám sát. Nếu đổi đường dẫn ổ thử, cập nhật cả luật `DiskSpaceLow` (danh sách `mountpoint`).
+
 ## Nhãn
 Metric VM dùng chung job `node` với nhãn `host=vm-web|vm-db`; dịch vụ có nhãn `service` (`nginx`, `redis`). Dashboard và luật hiện có hoạt động cho cả VM, nên khi bật luật CPU/RAM/disk thì chúng áp dụng cho mọi host.
 
