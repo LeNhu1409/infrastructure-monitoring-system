@@ -13,3 +13,6 @@ scenarios/textfile/*.prom.tmp
 Thumbs.db
 .vscode/
 .idea/
+
+# Bí mật cục bộ (token Telegram...)
+secrets/

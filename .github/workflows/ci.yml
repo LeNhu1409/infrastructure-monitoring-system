@@ -1,0 +1,52 @@
+name: validate-config
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feature/**"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Kiểm tra cú pháp luật cảnh báo và cấu hình Prometheus
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/config:/etc/prometheus:ro" \
+            prom/prometheus:v2.53.0 \
+            check config /etc/prometheus/prometheus.yml
+
+      - name: Kiểm tra cấu hình Alertmanager
+        run: |
+          docker run --rm --entrypoint amtool \
+            -v "$PWD/config/alertmanager.yml:/tmp/alertmanager.yml:ro" \
+            prom/alertmanager:v0.27.0 \
+            check-config /tmp/alertmanager.yml
+
+      - name: Kiểm tra file mẫu Alertmanager Telegram (không chứa bí mật)
+        run: |
+          # bot_token_file chỉ cần tồn tại khi chạy thật; tạo file giả trong runner để amtool đọc được
+          mkdir -p /tmp/secrets && echo "dummy" > /tmp/secrets/telegram_token
+          sed 's#/etc/alertmanager/secrets/telegram_token#/tmp/secrets/telegram_token#' \
+            config/alertmanager.telegram.example.yml > /tmp/am-telegram.yml
+          docker run --rm --entrypoint amtool \
+            -v /tmp/am-telegram.yml:/tmp/am-telegram.yml:ro \
+            -v /tmp/secrets:/tmp/secrets:ro \
+            prom/alertmanager:v0.27.0 \
+            check-config /tmp/am-telegram.yml
+
+      - name: Kiểm tra JSON dashboard
+        run: |
+          for f in dashboards/*.json; do python3 -m json.tool "$f" > /dev/null && echo "OK $f"; done
+
+      - name: Kiểm tra cú pháp script kịch bản
+        run: |
+          for f in scenarios/*.sh; do bash -n "$f" && echo "OK $f"; done
+
+      - name: Quét bí mật cơ bản
+        run: |
+          if git grep -nEi "(bot[0-9]{6,}:[A-Za-z0-9_-]{20,}|hooks\.slack\.com/services|BEGIN (RSA|OPENSSH) PRIVATE KEY)" -- . ':!.github'; then
+            echo "Phát hiện nghi ngờ lộ bí mật"; exit 1
+          fi

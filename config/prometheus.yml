@@ -20,6 +20,21 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
         labels:
           host: lab-host-1
+      # Máy ảo Vagrant (xem docs/vm-environment.md). Cùng job "node" để dashboard và luật dùng chung.
+      - targets: ["192.168.56.11:9100"]
+        labels:
+          host: vm-web
+      - targets: ["192.168.56.12:9100"]
+        labels:
+          host: vm-db
+
+  # Redis Exporter trên vm-db.
+  - job_name: redis
+    static_configs:
+      - targets: ["192.168.56.12:9121"]
+        labels:
+          host: vm-db
+          service: redis
 
   - job_name: cadvisor
     static_configs:
@@ -35,6 +50,30 @@ scrape_configs:
       - targets: ["http://demo-web:80"]
         labels:
           service: demo-web
+      - targets: ["http://192.168.56.11:80"]
+        labels:
+          service: nginx
+          host: vm-web
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Kiểm tra cổng TCP qua Blackbox Exporter (Redis trên vm-db).
+  # Lưu ý: luật ServiceDown hiện chỉ xét job="blackbox-http"; muốn cảnh báo cả TCP,
+  # đổi thành probe_success{job=~"blackbox-.*"} == 0 trong config/alert.rules.yml.
+  - job_name: blackbox-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets: ["192.168.56.12:6379"]
+        labels:
+          service: redis
+          host: vm-db
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

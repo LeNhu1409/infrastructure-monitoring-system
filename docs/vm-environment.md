@@ -1,0 +1,52 @@
+# Môi trường máy ảo (2 VM Linux đa dịch vụ)
+
+Theo hướng dẫn của giảng viên ("triển khai trên các máy ảo, đa dạng dịch vụ"), lab gồm hai máy ảo Ubuntu dựng bằng Vagrant. Prometheus, Grafana, Alertmanager vẫn chạy bằng Docker Compose trên máy host và scrape hai VM qua mạng riêng.
+
+| VM | IP | Dịch vụ | Exporter |
+|---|---|---|---|
+| `vm-web` | 192.168.56.11 | nginx (cổng 80) | Node Exporter :9100 |
+| `vm-db` | 192.168.56.12 | Redis (cổng 6379, chỉ nghe localhost) | Node Exporter :9100, Redis Exporter :9121 |
+
+Mỗi VM: 1 CPU, 1 GB RAM, box `ubuntu/jammy64`. Gói cài bằng `apt` (prometheus-node-exporter, prometheus-redis-exporter, nginx, redis-server, stress-ng).
+
+## Yêu cầu
+VirtualBox và Vagrant. Trên Windows, VirtualBox có thể xung đột với WSL2/Hyper-V: nếu `vagrant up` báo lỗi ảo hóa, thử bật tính năng "Windows Hypervisor Platform" hoặc chuyển sang Hyper-V/Multipass và báo lại để nhóm chỉnh Vagrantfile.
+
+## Dựng lab
+```bash
+cd vagrant
+vagrant up          # lần đầu tải box, mất vài phút
+vagrant status      # cả hai VM ở trạng thái running
+cd ..
+docker compose up -d
+```
+Mở http://localhost:9090/targets: ngoài các target cũ phải có `192.168.56.11:9100`, `192.168.56.12:9100`, `192.168.56.12:9121`, `http://192.168.56.11:80` (job `blackbox-http`) và `192.168.56.12:6379` (job `blackbox-tcp`) ở trạng thái UP.
+
+Nếu Prometheus trong Docker không tới được `192.168.56.x`: kiểm tra `ping 192.168.56.11` từ máy host trước; trên Docker Desktop, container đi ra qua máy host nên thường tới được. Nếu vẫn không, báo lại để đổi sang cách khác (ví dụ bridged network).
+
+## Nhãn
+Metric VM dùng chung job `node` với nhãn `host=vm-web|vm-db`; dịch vụ có nhãn `service` (`nginx`, `redis`). Dashboard và luật hiện có hoạt động cho cả VM, nên khi bật luật CPU/RAM/disk thì chúng áp dụng cho mọi host.
+
+## Kịch bản lỗi trên VM
+Chạy từ thư mục gốc repo bằng bash (Windows dùng Git Bash hoặc WSL có Vagrant):
+
+| Kịch bản | Lệnh | Tác động | Cảnh báo cần có |
+|---|---|---|---|
+| CPU cao | `bash scenarios/vm/01_cpu_high_vm.sh` | stress-ng trên vm-web | `HighCpuUsage` |
+| Disk đầy giả lập | `bash scenarios/vm/02_disk_full_vm.sh` | ổ loop 200MB trên vm-db đầy ~92%, không đụng ổ hệ thống | `DiskSpaceLow` |
+| Service down | `bash scenarios/vm/03_service_down_vm.sh` | dừng nginx trên vm-web | `ServiceDown` |
+| Cảnh báo giả | `bash scenarios/vm/01_cpu_high_vm.sh 30` | CPU cao ngắn hơn `for:` | `HighCpuUsage` chỉ `pending` |
+
+Kết quả ghi vào `scenarios/results/events.log` như các kịch bản Docker.
+
+## Việc cần làm sau khi có VM
+- Đo lại baseline cho từng host (baseline cũ là của VM WSL2 trong Docker Desktop).
+- Thêm biến chọn `host` và `service` vào dashboard.
+- Cập nhật `docs/architecture.md` và sơ đồ drawio (thêm 2 VM).
+- Nếu muốn cảnh báo cả kiểm tra TCP: đổi `ServiceDown` thành `probe_success{job=~"blackbox-.*"} == 0`.
+
+## Lưu ý an toàn
+Toàn bộ là môi trường lab của nhóm, IP dải riêng 192.168.56.0/24. Không dùng IP, tên hệ thống hoặc credential thật của VNPT.
+
+## Trạng thái kiểm thử
+Chưa được chạy thử trên máy thật của nhóm. Người chạy đầu tiên ghi kết quả vào `docs/integration_check.md` và báo lỗi nếu có.
