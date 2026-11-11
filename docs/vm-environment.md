@@ -5,7 +5,7 @@ Theo hướng dẫn của giảng viên ("triển khai trên các máy ảo, đa
 | VM | IP | Dịch vụ | Exporter |
 |---|---|---|---|
 | `vm-web` | 192.168.56.11 | nginx (cổng 80) | Node Exporter :9100 |
-| `vm-db` | 192.168.56.12 | Redis (cổng 6379, chỉ nghe localhost) | Node Exporter :9100, Redis Exporter :9121 |
+| `vm-db` | 192.168.56.12 | Redis (cổng 6379, nghe localhost và 192.168.56.12) | Node Exporter :9100, Redis Exporter :9121 |
 
 Mỗi VM: 1 CPU, 1 GB RAM, box `ubuntu/jammy64`. Gói cài bằng `apt` (prometheus-node-exporter, prometheus-redis-exporter, nginx, redis-server, stress-ng).
 

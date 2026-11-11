@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# vm-db: Redis (cổng 6379, chỉ nghe localhost) + Redis Exporter (cổng 9121).
+# vm-db: Redis (cổng 6379, nghe localhost và IP mạng riêng của lab) + Redis Exporter (cổng 9121).
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get install -y redis-server prometheus-redis-exporter
-systemctl enable --now redis-server
+# Cho phép Blackbox (trên máy host) kiểm tra cổng TCP; mạng 192.168.56.0/24 là mạng riêng của lab.
+sed -i 's/^bind .*/bind 127.0.0.1 192.168.56.12/' /etc/redis/redis.conf
+systemctl enable redis-server
+systemctl restart redis-server
 systemctl enable --now prometheus-redis-exporter

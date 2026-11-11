@@ -16,3 +16,6 @@ Thumbs.db
 
 # Bí mật cục bộ (token Telegram...)
 secrets/
+
+# Thu m?c tr?ng th�i c?a Vagrant
+.vagrant/
