@@ -3,11 +3,13 @@
 # Hướng dẫn đầy đủ: docs/vm-environment.md
 #
 #   vm-web  192.168.56.11  nginx + Node Exporter
-#   vm-db   192.168.56.12  Redis + Node Exporter + Redis Exporter
+#   vm-db   192.168.56.12  Redis + MariaDB + Node Exporter + Redis Exporter
+#   vm-app  192.168.56.13  API Python (cổng 8000) + Node Exporter
 
 VMS = {
   "vm-web" => { ip: "192.168.56.11", script: "web.sh", memory: 1024 },
   "vm-db"  => { ip: "192.168.56.12", script: "db.sh",  memory: 1024 },
+  "vm-app" => { ip: "192.168.56.13", script: "app.sh", memory: 1024 },
 }
 
 Vagrant.configure("2") do |config|

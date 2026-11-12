@@ -27,6 +27,9 @@ scrape_configs:
       - targets: ["192.168.56.12:9100"]
         labels:
           host: vm-db
+      - targets: ["192.168.56.13:9100"]
+        labels:
+          host: vm-app
 
   # Redis Exporter trên vm-db.
   - job_name: redis
@@ -54,6 +57,10 @@ scrape_configs:
         labels:
           service: nginx
           host: vm-web
+      - targets: ["http://192.168.56.13:8000/health"]
+        labels:
+          service: api
+          host: vm-app
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -73,6 +80,10 @@ scrape_configs:
       - targets: ["192.168.56.12:6379"]
         labels:
           service: redis
+          host: vm-db
+      - targets: ["192.168.56.12:3306"]
+        labels:
+          service: mariadb
           host: vm-db
     relabel_configs:
       - source_labels: [__address__]
