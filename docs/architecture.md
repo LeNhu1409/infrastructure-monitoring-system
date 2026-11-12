@@ -6,21 +6,26 @@
 
 File nguồn để chỉnh sửa: `docs/architecture.drawio` (mở bằng draw.io).
 
+Sơ đồ có hai vùng. Vùng Docker Compose chạy Prometheus, Alertmanager, Grafana và các exporter của lab. Vùng VirtualBox + Vagrant gồm 3 máy ảo Ubuntu 22.04 (`vm-web`, `vm-db`, `vm-app`) trong mạng host-only 192.168.56.0/24, có dịch vụ đa dạng theo hướng dẫn của giảng viên. Prometheus scrape exporter trên VM qua IP riêng (nét liền), Blackbox Exporter probe dịch vụ trên VM (nét đứt). Chi tiết dựng VM: `docs/vm-environment.md`.
+
 ## Thành phần
 
 | Thành phần | Vai trò | Cổng |
 |---|---|---|
 | Prometheus | Thu thập metric, lưu chuỗi thời gian, đánh giá luật cảnh báo | 9090 |
-| Node Exporter | Metric của VM Docker Desktop (WSL2): CPU, RAM, disk, network, uptime | 9100 (nội bộ) |
+| Node Exporter (trong Docker) | Metric của VM Docker Desktop (WSL2): CPU, RAM, disk, network, uptime | 9100 (nội bộ) |
 | cAdvisor | Metric theo container | 8080 |
-| Blackbox Exporter | Kiểm tra endpoint HTTP (UP/DOWN, thời gian phản hồi) | 9115 (nội bộ) |
+| Blackbox Exporter | Kiểm tra endpoint HTTP và cổng TCP (UP/DOWN, thời gian phản hồi) | 9115 (nội bộ) |
 | Alertmanager | Gom nhóm, giảm nhiễu, định tuyến cảnh báo | 9093 |
 | Grafana | Dashboard theo host/service, xem lịch sử cảnh báo | 3000 |
-| demo-web (nginx) | Dịch vụ mẫu bị giám sát | 8081 |
+| demo-web (nginx) | Dịch vụ mẫu bị giám sát (trong Docker) | 8081 |
+| `vm-web` (192.168.56.11) | nginx; Node Exporter | 80; 9100 |
+| `vm-db` (192.168.56.12) | Redis, MariaDB; Node Exporter, Redis Exporter | 6379, 3306; 9100, 9121 |
+| `vm-app` (192.168.56.13) | API Python (`/health`, dịch vụ systemd `hkdn-api`); Node Exporter | 8000; 9100 |
 
 ## Luồng dữ liệu
 
-1. Exporter phơi bày metric; Prometheus scrape mỗi 15 giây.
+1. Exporter phơi bày metric; Prometheus scrape mỗi 15 giây, gồm exporter trong Docker và exporter trên 3 VM (qua IP 192.168.56.x). Blackbox Exporter probe HTTP/TCP tới dịch vụ trong Docker và trên VM, Prometheus lấy kết quả probe.
 2. Prometheus đánh giá `config/alert.rules.yml`; điều kiện đúng quá thời gian `for:` thì chuyển `pending` -> `firing` và gửi sang Alertmanager.
 3. Alertmanager gom nhóm theo `alertname` và `instance` (`group_wait` 10s, `group_interval` 1m, `repeat_interval` 1h). Quy tắc ức chế: khi có cảnh báo `critical`, cảnh báo `warning` cùng `alertname` và `instance` bị bỏ qua. Cảnh báo được gửi tới receiver `default` (chưa gửi ra ngoài, xem trên UI :9093).
 4. Grafana truy vấn Prometheus để hiển thị dashboard (`dashboards/host-service-overview.json`) và lịch sử cảnh báo qua metric `ALERTS`.
@@ -31,8 +36,11 @@ File nguồn để chỉnh sửa: `docs/architecture.drawio` (mở bằng draw.i
 |---|---|---|
 | `prometheus` | – | Prometheus tự giám sát chính nó |
 | `node` | `host="lab-host-1"` | Metric VM Docker Desktop (WSL2) |
+| `node` | `host="vm-web"`, `"vm-db"`, `"vm-app"` | Metric 3 VM, dùng chung job `node` để dashboard và luật áp dụng cho mọi host |
+| `redis` | `host="vm-db"`, `service="redis"` | Redis Exporter :9121 trên `vm-db` |
 | `cadvisor` | – | Phân biệt container bằng nhãn `name` của cAdvisor |
-| `blackbox-http` | `service="demo-web"`, `instance=<URL probe>` | Thêm dịch vụ: thêm URL vào targets, gắn nhãn `service` |
+| `blackbox-http` | `service="demo-web"` / `"nginx"` / `"api"`, `host` (với VM), `instance=<URL probe>` | Thêm dịch vụ: thêm URL vào targets, gắn nhãn `service` |
+| `blackbox-tcp` | `service="redis"` / `"mariadb"`, `host="vm-db"` | Probe cổng 6379 và 3306; luật `ServiceDown` hiện chỉ xét `blackbox-http` |
 
 - `severity`: `warning` hoặc `critical`. Cảnh báo cùng loại ở hai mức dùng chung `alertname` để quy tắc ức chế hoạt động.
 - Metric giả lập dùng tiền tố `hkdn_sim_` (xem `scenarios/02_disk_full.sh`).
@@ -42,7 +50,8 @@ File nguồn để chỉnh sửa: `docs/architecture.drawio` (mở bằng draw.i
 - Node Exporter chạy trong Docker Desktop nên CPU, RAM, disk là của VM WSL2, không phải máy Windows; metric network là của container (chế độ bridge). Đo host Windows cần thêm windows_exporter (tùy chọn); trên Linux có thể dùng `network_mode: host`.
 - Ngưỡng cảnh báo CPU, RAM, disk là bản đề xuất tạm theo baseline sơ bộ (xem mục Baseline), chờ thống nhất với UTH và mentor VNPT; việc áp ngưỡng vào `config/alert.rules.yml` do thành viên phụ trách cảnh báo thực hiện.
 - Receiver mặc định chưa gửi ra ngoài (email/chat); cảnh báo chỉ xem trên giao diện Alertmanager và Grafana.
-- Dữ liệu Prometheus lưu 15 ngày; lab là prototype một máy, không có HA.
+- Cấu hình 3 VM chưa được chạy thử trên máy thật của nhóm, và baseline hiện có là của môi trường Docker Desktop, cần đo lại cho từng VM (xem `docs/vm-environment.md`).
+- Dữ liệu Prometheus lưu 15 ngày; lab là prototype trên một máy host (Prometheus, Grafana trong Docker, 3 VM VirtualBox), không có HA.
 - Chưa kết nối nền tảng quản trị trung tâm dữ liệu thật; chỉ dùng môi trường lab của nhóm, không dùng credential sản xuất.
 
 ## Kịch bản lỗi
@@ -57,6 +66,8 @@ Ba kịch bản lỗi và một kịch bản cảnh báo giả trong `scenarios/
 | `01_cpu_high.sh 30` (cảnh báo giả) | Tăng CPU 30 giây, ngắn hơn `for:` của luật | `HighCpuUsage` chỉ ở trạng thái `pending`, không `firing` | Chứng minh tăng đột biến ngắn không gây cảnh báo giả |
 
 Thời gian phát hiện (`detection_time`) đo từ lúc gây lỗi xong đến khi cảnh báo `firing` trên Prometheus, độ phân giải ~2s; chưa gồm `group_wait` của Alertmanager. Kết quả từng lần chạy ghi ở `scenarios/results.md`.
+
+Trên máy ảo có bộ kịch bản tương ứng trong `scenarios/vm/` (chạy qua `vagrant ssh`): CPU cao bằng stress-ng trên `vm-web`, disk đầy bằng ổ loop 200MB trên `vm-db`, dừng nginx trên `vm-web` hoặc `hkdn-api` trên `vm-app` để gây `ServiceDown`. Bảng kịch bản trong `docs/vm-environment.md`.
 
 ## Baseline và cơ sở đặt ngưỡng
 

@@ -54,7 +54,7 @@ vagrant provision vm-db    # chạy lại cài đặt trên VM đã có (ví d�
 ## Việc cần làm sau khi có VM
 - Đo lại baseline cho từng host (baseline cũ là của VM WSL2 trong Docker Desktop).
 - Thêm biến chọn `host` và `service` vào dashboard.
-- Cập nhật `docs/architecture.md` và sơ đồ drawio (thêm 2 VM).
+- Sơ đồ kiến trúc và `docs/architecture.md` đã cập nhật cho 3 VM (12/11/2026); khi thêm VM hoặc dịch vụ mới thì cập nhật lại cả hai.
 - Nếu muốn cảnh báo cả kiểm tra TCP (Redis, MariaDB): đổi `ServiceDown` thành `probe_success{job=~"blackbox-.*"} == 0` trong `config/alert.rules.yml` (việc của người phụ trách cảnh báo), rồi thêm kiểm thử trong `tests/`.
 
 ## Lưu ý an toàn
