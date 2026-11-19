@@ -1,9 +1,11 @@
+
 groups:
-  # Luật không cần đặt ngưỡng (chỉ xét sống/chết) nên bật sẵn.
+  # Luật kiểm tra tình trạng hoạt động của các dịch vụ.
   - name: hkdn-availability
     rules:
+      # Cảnh báo khi Node Exporter mất kết nối.
       - alert: NodeExporterDown
-        expr: up{job="node"} == 0
+        expr: up{job="node",host=~"vm-web|vm-db|vm-app"} == 0
         for: 1m
         labels:
           severity: critical
@@ -11,6 +13,7 @@ groups:
           summary: "Mất kết nối metric của {{ $labels.instance }}"
           description: "Prometheus không scrape được {{ $labels.instance }} trong hơn 1 phút."
 
+      # Cảnh báo khi HTTP probe thất bại.
       - alert: ServiceDown
         expr: probe_success{job="blackbox-http"} == 0
         for: 30s
@@ -20,48 +23,100 @@ groups:
           summary: "Dịch vụ {{ $labels.service }} không phản hồi"
           description: "Kiểm tra HTTP tới {{ $labels.instance }} thất bại trong hơn 30 giây."
 
-  # Luật theo ngưỡng: CHƯA bật vì chưa có baseline.
-  # Sau khi đo baseline và thống nhất với UTH, mentor VNPT: bỏ dấu "#", thay <NGUONG>
-  # và <THOI_GIAN> bằng giá trị đã chốt, rồi chạy: docker compose restart prometheus
-  #
-  # - name: hkdn-resources
-  #   rules:
-  #     - alert: HighCpuUsage
-  #       expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100) > <NGUONG>
-  #       for: <THOI_GIAN>
-  #       labels:
-  #         severity: warning
-  #       annotations:
-  #         summary: "CPU cao trên {{ $labels.instance }}"
-  #         description: 'CPU đang dùng {{ $value | printf "%.1f" }}%.'
-  #
-  #     - alert: HighMemoryUsage
-  #       expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > <NGUONG>
-  #       for: <THOI_GIAN>
-  #       labels:
-  #         severity: warning
-  #       annotations:
-  #         summary: "RAM cao trên {{ $labels.instance }}"
-  #         description: 'RAM đang dùng {{ $value | printf "%.1f" }}%.'
-  #
-  #     # Disk thật (chế độ loop của kịch bản 2).
-  #     - alert: DiskSpaceLow
-  #       expr: >
-  #         (1 - node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs"}
-  #            / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs"}) * 100 > <NGUONG>
-  #       for: <THOI_GIAN>
-  #       labels:
-  #         severity: warning
-  #       annotations:
-  #         summary: "Disk gần đầy tại {{ $labels.mountpoint }}"
-  #         description: 'Phân vùng {{ $labels.mountpoint }} đã dùng {{ $value | printf "%.1f" }}%.'
-  #
-  #     # Disk giả lập qua textfile collector (chế độ textfile của kịch bản 2).
-  #     - alert: DiskSpaceLowSimulated
-  #       expr: hkdn_sim_disk_used_percent > <NGUONG>
-  #       for: <THOI_GIAN>
-  #       labels:
-  #         severity: warning
-  #       annotations:
-  #         summary: "Disk giả lập đầy tại {{ $labels.mountpoint }}"
-  #         description: 'Giá trị mô phỏng {{ $value | printf "%.0f" }}%.'
+  # Các luật giám sát tài nguyên.
+  # Ngưỡng tạm thời dựa trên baseline 18 giờ,
+  # chờ thống nhất với UTH và mentor VNPT.
+  # Warning và Critical dùng cùng alertname để hỗ trợ inhibit.
+  - name: hkdn-resources
+    rules:
+      # CPU Warning: trên 70% liên tục 2 phút.
+      - alert: HighCpuUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="node",host=~"vm-web|vm-db|vm-app",mode="idle"}[1m])) * 100) > 70
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU cao trên {{ $labels.instance }}"
+          description: 'CPU đang dùng {{ $value | printf "%.1f" }}% (ngưỡng warning 70%).'
+
+      # CPU Critical: trên 90% liên tục 2 phút.
+      - alert: HighCpuUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{job="node",host=~"vm-web|vm-db|vm-app",mode="idle"}[1m])) * 100) > 90
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "CPU rất cao trên {{ $labels.instance }}"
+          description: 'CPU đang dùng {{ $value | printf "%.1f" }}% (ngưỡng critical 90%).'
+
+      # RAM Warning: trên 80% liên tục 5 phút.
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes{job="node",host=~"vm-web|vm-db|vm-app"} / node_memory_MemTotal_bytes{job="node",host=~"vm-web|vm-db|vm-app"}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RAM cao trên {{ $labels.instance }}"
+          description: 'RAM đang dùng {{ $value | printf "%.1f" }}% (ngưỡng warning 80%).'
+
+      # RAM Critical: trên 90% liên tục 5 phút.
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes{job="node",host=~"vm-web|vm-db|vm-app"} / node_memory_MemTotal_bytes{job="node",host=~"vm-web|vm-db|vm-app"}) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RAM rất cao trên {{ $labels.instance }}"
+          description: 'RAM đang dùng {{ $value | printf "%.1f" }}% (ngưỡng critical 90%).'
+
+      # Disk root Warning: sử dụng trên 80% liên tục 5 phút.
+      - alert: DiskSpaceLow
+        expr: >
+          (1 - node_filesystem_avail_bytes{
+            job="node",
+            host=~"vm-web|vm-db|vm-app",
+            mountpoint="/",
+            fstype="ext4"
+          } / node_filesystem_size_bytes{
+            job="node",
+            host=~"vm-web|vm-db|vm-app",
+            mountpoint="/",
+            fstype="ext4"
+          }) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk root gần đầy trên {{ $labels.host }}"
+          description: 'Phân vùng root đã sử dụng {{ $value | printf "%.1f" }}% (ngưỡng warning 80%).'
+
+      # Disk root Critical: sử dụng trên 90% liên tục 5 phút.
+      - alert: DiskSpaceLow
+        expr: >
+          (1 - node_filesystem_avail_bytes{
+            job="node",
+            host=~"vm-web|vm-db|vm-app",
+            mountpoint="/",
+            fstype="ext4"
+          } / node_filesystem_size_bytes{
+            job="node",
+            host=~"vm-web|vm-db|vm-app",
+            mountpoint="/",
+            fstype="ext4"
+          }) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk root rất gần đầy trên {{ $labels.host }}"
+          description: 'Phân vùng root đã sử dụng {{ $value | printf "%.1f" }}% (ngưỡng critical 90%).'
+
+      # Disk giả lập qua textfile collector phục vụ demo.
+      - alert: DiskSpaceLowSimulated
+        expr: hkdn_sim_disk_used_percent > 80
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk giả lập đầy trên vm-db"
+          description: 'Giá trị mô phỏng {{ $value | printf "%.0f" }}%.'

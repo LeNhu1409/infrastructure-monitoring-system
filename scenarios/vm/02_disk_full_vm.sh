@@ -1,30 +1,70 @@
 #!/usr/bin/env bash
-# Kịch bản 2 (VM): disk đầy GIẢ LẬP trên vm-db bằng ổ loop 200MB (không đụng ổ hệ thống của VM).
-# Chạy: bash scenarios/vm/02_disk_full_vm.sh [số giây, mặc định 420]
-# Cần luật DiskSpaceLow đã được bật trong config/alert.rules.yml.
-# Mặc định 420 giây vì luật disk có for: 5m (cần lớn hơn 5 phút mới kịp firing).
 set -euo pipefail
+
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib_vm.sh"
 
 VM="vm-db"
 DURATION="${1:-420}"
+MOUNT_POINT="/mnt/hkdn-small-disk"
+IMAGE="/tmp/hkdn-small-disk.img"
+METRIC_DIR="/var/lib/prometheus/node-exporter"
+METRIC_FILE="$METRIC_DIR/hkdn_disk.prom"
+
+DETECTED=0
+
 require_prometheus
 require_vm "$VM"
 
 cleanup() {
-  vm_ssh "$VM" "sudo umount /mnt/hkdn-small-disk 2>/dev/null; sudo rmdir /mnt/hkdn-small-disk 2>/dev/null; rm -f /tmp/hkdn-small-disk.img; true" >/dev/null 2>&1 || true
+    vm_ssh "$VM" "sudo rm -f $METRIC_FILE; sudo umount $MOUNT_POINT 2>/dev/null || true; sudo rmdir $MOUNT_POINT 2>/dev/null || true; sudo rm -f $IMAGE; true" >/dev/null 2>&1 || true
 }
+
 trap cleanup EXIT
 
-log_event "INJECT scenario=disk_full vm=$VM duration=${DURATION}s"
-vm_ssh "$VM" "sudo mkdir -p /mnt/hkdn-small-disk && truncate -s 200M /tmp/hkdn-small-disk.img && mkfs.ext4 -q -F -m 0 /tmp/hkdn-small-disk.img && sudo mount -o loop /tmp/hkdn-small-disk.img /mnt/hkdn-small-disk && SIZE=\$(df --output=size -BM /mnt/hkdn-small-disk | tail -1 | tr -dc 0-9) && sudo fallocate -l \$(( SIZE * 92 / 100 ))M /mnt/hkdn-small-disk/fill.bin" >/dev/null
+# Dọn dữ liệu thử nghiệm cũ
+cleanup
+
+# Tạo ổ đĩa loop ảo 200 MB
+vm_ssh "$VM" "sudo mkdir -p $MOUNT_POINT && sudo truncate -s 200M $IMAGE && sudo mkfs.ext4 -q -F -m 0 $IMAGE && sudo mount -o loop $IMAGE $MOUNT_POINT"
+
+# Chiếm 92% dung lượng ổ đĩa
+vm_ssh "$VM" "SIZE=\$(df --output=size -BM $MOUNT_POINT | tail -1 | tr -dc 0-9) && sudo fallocate -l \$(( SIZE * 92 / 100 ))M $MOUNT_POINT/fill.bin"
+
+# Ghi metric cho Node Exporter Textfile Collector
+vm_ssh "$VM" "PCT=\$(df --output=pcent $MOUNT_POINT | tail -1 | tr -dc 0-9) && echo hkdn_sim_disk_used_percent \$PCT | sudo tee $METRIC_FILE >/dev/null"
+
+# Kiểm tra metric đã được Node Exporter đọc
+if ! vm_ssh "$VM" "curl -fsS http://localhost:9100/metrics | grep '^hkdn_sim_disk_used_percent '" >/dev/null; then
+    log_event "ERROR textfile_metric_not_visible vm=$VM"
+    exit 1
+fi
 
 START=$SECONDS
-wait_for_alert DiskSpaceLow "$DURATION" || true
-REMAIN=$(( DURATION - (SECONDS - START) ))
-if (( REMAIN > 0 )); then sleep "$REMAIN"; fi
 
+log_event "INJECT scenario=disk_full vm=$VM mountpoint=$MOUNT_POINT duration=${DURATION}s"
+
+if wait_for_alert DiskSpaceLowSimulated "$DURATION" "$START"; then
+    DETECTED=1
+else
+    DETECTED=0
+fi
+
+# Giữ tình trạng giả lập đủ thời gian
+REMAIN=$(( DURATION - (SECONDS - START) ))
+
+if (( REMAIN > 0 )); then
+    sleep "$REMAIN"
+fi
+
+# Khôi phục ổ đĩa và xóa metric
 cleanup
+
 log_event "RECOVER scenario=disk_full vm=$VM"
-wait_for_resolved DiskSpaceLow 300 || true
+
+if (( DETECTED )); then
+    wait_for_resolved DiskSpaceLowSimulated 300 || true
+else
+    log_event "RESOLUTION_NOT_APPLICABLE alert=DiskSpaceLowSimulated reason=never_fired"
+fi
+
 log_event "DONE scenario=disk_full vm=$VM"

@@ -1,74 +1,220 @@
 #!/usr/bin/env python3
-"""Đo baseline từ Prometheus API (chỉ dùng thư viện chuẩn, không cần cài thêm).
+"""Đo baseline 3 VM Linux từ Prometheus API.
 
-Chạy (lab đã chạy bình thường, CHƯA bơm lỗi, tối thiểu 24h):
-  python baseline.py --hours 24 --out baseline_result.md
-Tùy chọn: --prom http://localhost:9090  --step 60
+Phạm vi:
+- vm-web, vm-db, vm-app
+- CPU, RAM, Disk root (/), Network
+- HTTP probe: Web và API
 
-Dùng đúng biểu thức của dashboard host-service-overview.json để số đo khớp với những gì hiển thị.
+Chạy:
+    python baseline.py --hours 24 --out docs/baseline_result.md
 """
-import argparse, json, statistics, time, urllib.parse, urllib.request
+
+import argparse
+import json
+import math
+import statistics
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 
-DISK_FS = 'fstype!~"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs"'
+HOST_FILTER = 'job="node",host=~"vm-web|vm-db|vm-app"'
+
 QUERIES = [
-    ("CPU (%)", '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[1m])) * 100)', "instance"),
-    ("RAM (%)", '(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100', "instance"),
-    ("Disk (%)", f'(1 - node_filesystem_avail_bytes{{{DISK_FS}}} / node_filesystem_size_bytes{{{DISK_FS}}}) * 100', "mountpoint"),
-    ("Network nhận (B/s)", 'sum by (instance) (rate(node_network_receive_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[1m]))', "instance"),
-    ("Network gửi (B/s)", 'sum by (instance) (rate(node_network_transmit_bytes_total{device!~"lo|veth.*|docker.*|br-.*"}[1m]))', "instance"),
-    ("Thời gian probe (s)", 'probe_duration_seconds{job="blackbox-http"}', "service"),
-    ("Probe thành công (1=UP)", 'probe_success{job="blackbox-http"}', "service"),
-    ("CPU theo container (%)", 'sum by (name) (rate(container_cpu_usage_seconds_total{name!=""}[1m])) * 100', "name"),
-    ("RAM theo container (MB)", 'sum by (name) (container_memory_working_set_bytes{name!=""}) / 1024 / 1024', "name"),
+    (
+        "CPU (%)",
+        f'100 - avg by (host) (rate(node_cpu_seconds_total{{{HOST_FILTER},mode="idle"}}[5m])) * 100',
+        "host",
+    ),
+    (
+        "RAM (%)",
+        f'(1 - node_memory_MemAvailable_bytes{{{HOST_FILTER}}} / node_memory_MemTotal_bytes{{{HOST_FILTER}}}) * 100',
+        "host",
+    ),
+    (
+        "Disk root (%)",
+        f'(1 - node_filesystem_avail_bytes{{{HOST_FILTER},mountpoint="/",fstype="ext4"}} / node_filesystem_size_bytes{{{HOST_FILTER},mountpoint="/",fstype="ext4"}}) * 100',
+        "host",
+    ),
+    (
+        "Network nhận (B/s)",
+        f'sum by (host) (rate(node_network_receive_bytes_total{{{HOST_FILTER},device!~"lo|veth.*|docker.*|br-.*"}}[5m]))',
+        "host",
+    ),
+    (
+        "Network gửi (B/s)",
+        f'sum by (host) (rate(node_network_transmit_bytes_total{{{HOST_FILTER},device!~"lo|veth.*|docker.*|br-.*"}}[5m]))',
+        "host",
+    ),
+    (
+        "Thời gian probe HTTP (s)",
+        'probe_duration_seconds{job="blackbox-http",service=~"nginx|api"}',
+        "service",
+    ),
+    (
+        "Probe HTTP thành công (1=UP)",
+        'probe_success{job="blackbox-http",service=~"nginx|api"}',
+        "service",
+    ),
 ]
 
-def query_range(prom, expr, start, end, step):
-    q = urllib.parse.urlencode({"query": expr, "start": start, "end": end, "step": step})
-    with urllib.request.urlopen(f"{prom}/api/v1/query_range?{q}", timeout=60) as r:
-        d = json.load(r)
-    if d.get("status") != "success":
-        raise RuntimeError(d)
-    return d["data"]["result"]
 
-def pct(vals, p):
-    s = sorted(vals)
-    k = (len(s) - 1) * p
-    lo, hi = int(k), min(int(k) + 1, len(s) - 1)
-    return s[lo] + (s[hi] - s[lo]) * (k - lo)
+def query_range(prom, expr, start, end, step):
+    query = urllib.parse.urlencode({
+        "query": expr,
+        "start": start,
+        "end": end,
+        "step": step,
+    })
+
+    url = f"{prom.rstrip('/')}/api/v1/query_range?{query}"
+
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = json.load(response)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Không thể truy vấn Prometheus: {error}") from error
+
+    if data.get("status") != "success":
+        raise RuntimeError(f"Prometheus trả về lỗi: {data}")
+
+    return data["data"]["result"]
+
+
+def pct(values, percentile):
+    values = sorted(values)
+    k = (len(values) - 1) * percentile
+    low = int(k)
+    high = min(low + 1, len(values) - 1)
+
+    return values[low] + (
+        values[high] - values[low]
+    ) * (k - low)
+
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--prom", default="http://localhost:9090")
-    ap.add_argument("--hours", type=float, default=24)
-    ap.add_argument("--step", type=int, default=60)
-    ap.add_argument("--out", default="baseline_result.md")
-    a = ap.parse_args()
+    parser = argparse.ArgumentParser(
+        description="Đo baseline tài nguyên 3 Linux VM từ Prometheus"
+    )
+
+    parser.add_argument("--prom", default="http://localhost:9090")
+    parser.add_argument("--hours", type=float, default=24)
+    parser.add_argument("--step", type=int, default=60)
+    parser.add_argument("--out", default="baseline_result.md")
+
+    args = parser.parse_args()
+
+    if args.hours <= 0 or args.step <= 0:
+        parser.error("--hours và --step phải lớn hơn 0")
+
     end = time.time()
-    start = end - a.hours * 3600
-    fmt = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = [f"# Baseline lab N4.7", "",
-             f"- Khoảng đo: {fmt(start)} → {fmt(end)} ({a.hours:g} giờ), step {a.step}s",
-             f"- Nguồn: Prometheus {a.prom}; biểu thức lấy từ dashboard host-service-overview", ""]
-    for title, expr, label in QUERIES:
+    start = end - args.hours * 3600
+
+    fmt = lambda timestamp: datetime.fromtimestamp(
+        timestamp, timezone.utc
+    ).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [
+        "# Baseline Linux VMs - N4.7",
+        "",
+        f"- Khoảng đo: {fmt(start)} → {fmt(end)} ({args.hours:g} giờ)",
+        f"- Chu kỳ lấy mẫu: {args.step}s",
+        f"- Nguồn: Prometheus {args.prom}",
+        "- Phạm vi: vm-web, vm-db, vm-app",
+        "- Disk: chỉ phân vùng root (/), loại bỏ shared folder /vagrant",
+        "- Trạng thái: đo trong điều kiện vận hành bình thường, không bơm lỗi",
+        "",
+    ]
+
+    errors = []
+
+    for title, expression, label in QUERIES:
+        lines += [f"## {title}", ""]
+
         try:
-            res = query_range(a.prom, expr, start, end, a.step)
-        except Exception as e:
-            lines += [f"## {title}", f"Lỗi truy vấn: {e}", ""]
+            results = query_range(
+                args.prom, expression, start, end, args.step
+            )
+        except RuntimeError as error:
+            message = str(error)
+            errors.append(f"{title}: {message}")
+            lines += [f"> LỖI TRUY VẤN: {message}", ""]
             continue
-        lines += [f"## {title}", "", f"| {label} | Số mẫu | avg | p50 | p95 | p99 | max |", "|---|---|---|---|---|---|---|"]
-        if not res:
-            lines += ["| (không có dữ liệu) | | | | | | |", ""]
+
+        lines += [
+            f"| {label} | Số mẫu | avg | p50 | p95 | p99 | max |",
+            "|---|---:|---:|---:|---:|---:|---:|",
+        ]
+
+        if not results:
+            lines += ["| Không có dữ liệu | | | | | | |", ""]
             continue
-        for s in res:
-            v = [float(x[1]) for x in s["values"] if x[1] not in ("NaN", "+Inf", "-Inf")]
-            if not v:
+
+        valid_series = 0
+
+        for series in results:
+            values = []
+
+            for sample in series.get("values", []):
+                try:
+                    value = float(sample[1])
+                    if math.isfinite(value):
+                        values.append(value)
+                except (ValueError, TypeError, IndexError):
+                    continue
+
+            name = series.get("metric", {}).get(label, "-")
+
+            if not values:
+                lines.append(
+                    f"| {name} | 0 | Không có dữ liệu hợp lệ | | | | |"
+                )
                 continue
-            name = s["metric"].get(label, "-")
-            lines.append(f"| {name} | {len(v)} | {statistics.fmean(v):.3f} | {pct(v,.5):.3f} | {pct(v,.95):.3f} | {pct(v,.99):.3f} | {max(v):.3f} |")
+
+            valid_series += 1
+
+            lines.append(
+                f"| {name} | {len(values)} "
+                f"| {statistics.fmean(values):.3f} "
+                f"| {pct(values, 0.50):.3f} "
+                f"| {pct(values, 0.95):.3f} "
+                f"| {pct(values, 0.99):.3f} "
+                f"| {max(values):.3f} |"
+            )
+
+        if valid_series == 0:
+            errors.append(f"{title}: Không có chuỗi dữ liệu hợp lệ")
+
         lines.append("")
-    open(a.out, "w", encoding="utf-8").write("\n".join(lines))
-    print(f"Đã ghi {a.out}")
+
+    if errors:
+        lines += [
+            "## Cảnh báo về chất lượng dữ liệu",
+            "",
+            "Báo cáo chưa đầy đủ. Cần kiểm tra các truy vấn sau:",
+            "",
+        ]
+        lines.extend(f"- {error}" for error in errors)
+        lines.append("")
+
+    with open(args.out, "w", encoding="utf-8") as output:
+        output.write("\n".join(lines))
+
+    print(f"Đã ghi kết quả: {args.out}")
+
+    if errors:
+        print(
+            f"Có {len(errors)} lỗi hoặc truy vấn thiếu dữ liệu. "
+            "Vui lòng kiểm tra báo cáo.",
+            file=sys.stderr,
+        )
+        return 1
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
