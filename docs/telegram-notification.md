@@ -27,7 +27,7 @@ docker compose up -d alertmanager
 (Đường dẫn file cấu hình trong container tùy theo docker-compose của nhóm.)
 
 ## 4. Thử
-Chạy `bash scenarios/03_service_down.sh`: sẽ nhận tin CẢNH BÁO, và tin ĐÃ KHẮC PHỤC khi dịch vụ lên lại (sau `group_interval`). Chụp ảnh tin nhắn bỏ vào `scenarios/results/`.
+Chạy `bash scenarios/vm/03_service_down_vm.sh`: sẽ nhận tin CẢNH BÁO, và tin ĐÃ KHẮC PHỤC khi dịch vụ lên lại (sau `group_interval`). Chụp ảnh tin nhắn bỏ vào `scenarios/results/`.
 
 ## Lưu ý
 - Mất khoảng `group_wait` (10s) + thời gian `for:` mới có tin đầu tiên.

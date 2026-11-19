@@ -21,19 +21,19 @@ cleanup() {
 
 trap cleanup EXIT
 
-# Dọn dữ liệu thử nghiệm cũ
+# Dá»n dá»¯ liá»‡u thá»­ nghiá»‡m cÅ©
 cleanup
 
-# Tạo ổ đĩa loop ảo 200 MB
+# Táº¡o á»• Ä‘Ä©a loop áº£o 200 MB
 vm_ssh "$VM" "sudo mkdir -p $MOUNT_POINT && sudo truncate -s 200M $IMAGE && sudo mkfs.ext4 -q -F -m 0 $IMAGE && sudo mount -o loop $IMAGE $MOUNT_POINT"
 
-# Chiếm 92% dung lượng ổ đĩa
+# Chiáº¿m 92% dung lÆ°á»£ng á»• Ä‘Ä©a
 vm_ssh "$VM" "SIZE=\$(df --output=size -BM $MOUNT_POINT | tail -1 | tr -dc 0-9) && sudo fallocate -l \$(( SIZE * 92 / 100 ))M $MOUNT_POINT/fill.bin"
 
 # Ghi metric cho Node Exporter Textfile Collector
 vm_ssh "$VM" "PCT=\$(df --output=pcent $MOUNT_POINT | tail -1 | tr -dc 0-9) && echo hkdn_sim_disk_used_percent \$PCT | sudo tee $METRIC_FILE >/dev/null"
 
-# Kiểm tra metric đã được Node Exporter đọc
+# Kiá»ƒm tra metric Ä‘Ã£ Ä‘Æ°á»£c Node Exporter Ä‘á»c
 if ! vm_ssh "$VM" "curl -fsS http://localhost:9100/metrics | grep '^hkdn_sim_disk_used_percent '" >/dev/null; then
     log_event "ERROR textfile_metric_not_visible vm=$VM"
     exit 1
@@ -49,14 +49,14 @@ else
     DETECTED=0
 fi
 
-# Giữ tình trạng giả lập đủ thời gian
+# Giá»¯ tÃ¬nh tráº¡ng giáº£ láº­p Ä‘á»§ thá»i gian
 REMAIN=$(( DURATION - (SECONDS - START) ))
 
 if (( REMAIN > 0 )); then
     sleep "$REMAIN"
 fi
 
-# Khôi phục ổ đĩa và xóa metric
+# KhÃ´i phá»¥c á»• Ä‘Ä©a vÃ  xÃ³a metric
 cleanup
 
 log_event "RECOVER scenario=disk_full vm=$VM"

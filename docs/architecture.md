@@ -68,7 +68,7 @@ Cấu hình hiện tại có **9 rule** trong `config/alert.rules.yml`:
 
 | Alert | Điều kiện | `for:` | Phạm vi |
 |---|---|---:|---|
-| `NodeExporterDown` | `up{job="node",host=~"vm-web|vm-db|vm-app"} == 0` | 1m | Node Exporter của 3 VM |
+| `NodeExporterDown` | `up{job="node",host=~"vm-web\|vm-db\|vm-app"} == 0` | 1m | Node Exporter của 3 VM |
 | `ServiceDown` | `probe_success{job="blackbox-http"} == 0` | 30s | HTTP probe |
 | `HighCpuUsage` – warning | CPU > 70% | 2m | 3 VM |
 | `HighCpuUsage` – critical | CPU > 90% | 2m | 3 VM |
@@ -91,7 +91,7 @@ Các kịch bản VM nằm trong `scenarios/vm/`; kịch bản Docker nằm tron
 | CPU High | Chạy `stress-ng` trên `vm-web` | `HighCpuUsage` | Script xác nhận stress-ng chạy rồi mới bắt đầu tính detection time |
 | Disk Full giả lập | Tạo filesystem loop 200 MB trên `vm-db`, ghi dữ liệu khoảng 92%, xuất `hkdn_sim_disk_used_percent` qua Textfile Collector | `DiskSpaceLowSimulated` | Không làm đầy root filesystem; không phải kiểm thử thành công `DiskSpaceLow` |
 | Service Down | Dừng Nginx trên `vm-web` hoặc `hkdn-api` trên `vm-app` | `ServiceDown` | HTTP probe thất bại |
-| Cảnh báo giả CPU | Chạy tải CPU 30 giây | Không được chuyển `HighCpuUsage` sang `firing` | Điều kiện ngắn hơn `for: 2m` |
+| CPU spike ngắn | Chạy tải CPU 30 giây | Không được chuyển `HighCpuUsage` sang `firing` | Điều kiện ngắn hơn `for: 2m` |
 
 ### Phương pháp đo detection/resolve time
 
