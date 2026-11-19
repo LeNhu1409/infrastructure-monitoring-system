@@ -1,64 +1,144 @@
-# Môi trường máy ảo (2 VM Linux đa dịch vụ)
+# Môi trường máy ảo (3 VM Linux đa dịch vụ)
 
-Theo hướng dẫn của giảng viên ("triển khai trên các máy ảo, đa dạng dịch vụ"), lab gồm ba máy ảo Ubuntu dựng bằng Vagrant. Prometheus, Grafana, Alertmanager vẫn chạy bằng Docker Compose trên máy host và scrape ba VM qua mạng riêng.
+Lab gồm **ba máy ảo Ubuntu 22.04** được dựng bằng VirtualBox + Vagrant. Prometheus, Grafana, Alertmanager và Blackbox Exporter chạy bằng Docker Compose trên máy host; Prometheus scrape ba VM qua mạng host-only.
 
-| VM | IP | Dịch vụ | Exporter / cách giám sát |
+## 1. Danh sách VM
+
+| VM | IP host-only | Dịch vụ | Exporter / cách giám sát |
 |---|---|---|---|
-| `vm-web` | 192.168.56.11 | nginx (cổng 80) | Node Exporter :9100, HTTP probe |
-| `vm-db` | 192.168.56.12 | Redis (6379) và MariaDB (3306), cùng nghe localhost và 192.168.56.12 | Node Exporter :9100, Redis Exporter :9121, TCP probe cổng 6379 và 3306 |
-| `vm-app` | 192.168.56.13 | API Python nhỏ (cổng 8000, `/health`), chạy như dịch vụ systemd `hkdn-api` | Node Exporter :9100, HTTP probe `/health` |
+| `vm-web` | `192.168.56.11` | Nginx :80 | Node Exporter :9100; HTTP probe |
+| `vm-db` | `192.168.56.12` | Redis :6379, MariaDB :3306 | Node Exporter :9100; Redis Exporter :9121; TCP probe Redis/MariaDB |
+| `vm-app` | `192.168.56.13` | Python API :8000, `/health`, systemd `hkdn-api` | Node Exporter :9100; HTTP probe |
 
-Mỗi VM: 1 CPU, 1 GB RAM, box `ubuntu/jammy64`. Gói cài bằng `apt` (prometheus-node-exporter, prometheus-redis-exporter, nginx, redis-server, mariadb-server, python3, stress-ng).
+Mạng host-only: `192.168.56.0/24`. Cấu hình VM hiện tại: Ubuntu 22.04, mỗi VM 1 CPU và 1 GB RAM. Các gói dịch vụ được cài qua provisioning Vagrant.
 
-## Yêu cầu
-VirtualBox và Vagrant. Trên Windows, VirtualBox có thể xung đột với WSL2/Hyper-V: nếu `vagrant up` báo lỗi ảo hóa, thử bật tính năng "Windows Hypervisor Platform" hoặc chuyển sang Hyper-V/Multipass và báo lại để nhóm chỉnh Vagrantfile.
+## 2. Yêu cầu
 
-## Dựng lab
+- VirtualBox và Vagrant.
+- Docker Desktop/Docker Engine và Docker Compose để chạy monitoring stack.
+- Trên Windows, VirtualBox có thể xung đột với WSL2/Hyper-V. Nếu `vagrant up` báo lỗi ảo hóa, kiểm tra cấu hình hypervisor trước khi tiếp tục.
+
+## 3. Dựng lab
+
+Chạy từ thư mục gốc repository:
+
 ```bash
 cd vagrant
-vagrant up          # lần đầu tải box, mất vài phút
-vagrant status      # cả hai VM ở trạng thái running
+vagrant up
+vagrant status
 cd ..
 docker compose up -d
 ```
-Mở http://localhost:9090/targets: ngoài các target cũ phải có `192.168.56.11:9100`, `192.168.56.12:9100`, `192.168.56.12:9121`, `http://192.168.56.11:80` (job `blackbox-http`) và `192.168.56.12:6379` (job `blackbox-tcp`) ở trạng thái UP, cùng `192.168.56.13:9100`, `http://192.168.56.13:8000/health` và `192.168.56.12:3306`.
 
-Nếu Prometheus trong Docker không tới được `192.168.56.x`: kiểm tra `ping 192.168.56.11` từ máy host trước; trên Docker Desktop, container đi ra qua máy host nên thường tới được. Nếu vẫn không, báo lại để đổi sang cách khác (ví dụ bridged network).
+`vagrant status` cần hiển thị đủ **ba VM** (`vm-web`, `vm-db`, `vm-app`) ở trạng thái `running`.
 
-## Lưu ý Node Exporter của Ubuntu
-Bản cài bằng `apt` mặc định loại trừ mọi mountpoint dưới `/mnt` và `/media`. `vagrant/provision/common.sh` ghi đè tham số `--collector.filesystem.mount-points-exclude` để ổ thử của kịch bản disk (`/mnt/hkdn-small-disk`) được giám sát. Nếu đổi đường dẫn ổ thử, cập nhật cả luật `DiskSpaceLow` (danh sách `mountpoint`).
+Trên Windows PowerShell, lệnh tương đương để khởi động VM từ thư mục `vagrant`:
 
-## Nhãn
-Metric VM dùng chung job `node` với nhãn `host=vm-web|vm-db`; dịch vụ có nhãn `service` (`nginx`, `redis`). Dashboard và luật hiện có hoạt động cho cả VM, nên khi bật luật CPU/RAM/disk thì chúng áp dụng cho mọi host.
-
-## Kịch bản lỗi trên VM
-Chạy từ thư mục gốc repo bằng bash (Windows dùng Git Bash hoặc WSL có Vagrant):
-
-| Kịch bản | Lệnh | Tác động | Cảnh báo cần có |
-|---|---|---|---|
-| CPU cao | `bash scenarios/vm/01_cpu_high_vm.sh` | stress-ng trên vm-web | `HighCpuUsage` |
-| Disk đầy giả lập | `bash scenarios/vm/02_disk_full_vm.sh` | ổ loop 200MB trên vm-db đầy ~92%, không đụng ổ hệ thống | `DiskSpaceLow` |
-| Service down | `bash scenarios/vm/03_service_down_vm.sh` | dừng nginx trên vm-web | `ServiceDown` |
-| Service down (API) | `bash scenarios/vm/03_service_down_vm.sh 120 vm-app hkdn-api` | dừng dịch vụ API trên vm-app | `ServiceDown` |
-| Cảnh báo giả | `bash scenarios/vm/01_cpu_high_vm.sh 30` | CPU cao ngắn hơn `for:` | `HighCpuUsage` chỉ `pending` |
-
-Kết quả ghi vào `scenarios/results/events.log` như các kịch bản Docker.
-
-## Thêm VM mới hoặc cập nhật VM đang chạy
-```bash
-cd vagrant
-vagrant up vm-app          # dựng VM mới (VM khác giữ nguyên)
-vagrant provision vm-db    # chạy lại cài đặt trên VM đã có (ví dụ để thêm MariaDB)
+```powershell
+Set-Location .\vagrant
+vagrant up
+vagrant status
+Set-Location ..
+docker compose up -d
 ```
 
-## Việc cần làm sau khi có VM
-- Đo lại baseline cho từng host (baseline cũ là của VM WSL2 trong Docker Desktop).
-- Thêm biến chọn `host` và `service` vào dashboard.
-- Sơ đồ kiến trúc và `docs/architecture.md` đã cập nhật cho 3 VM (12/11/2026); khi thêm VM hoặc dịch vụ mới thì cập nhật lại cả hai.
-- Nếu muốn cảnh báo cả kiểm tra TCP (Redis, MariaDB): đổi `ServiceDown` thành `probe_success{job=~"blackbox-.*"} == 0` trong `config/alert.rules.yml` (việc của người phụ trách cảnh báo), rồi thêm kiểm thử trong `tests/`.
+## 4. Kiểm tra Prometheus Targets
 
-## Lưu ý an toàn
-Toàn bộ là môi trường lab của nhóm, IP dải riêng 192.168.56.0/24. Không dùng IP, tên hệ thống hoặc credential thật của VNPT.
+Mở http://localhost:9090/targets. Các target chính cần kiểm tra:
 
-## Trạng thái kiểm thử
-Chưa được chạy thử trên máy thật của nhóm. Người chạy đầu tiên ghi kết quả vào `docs/integration_check.md` và báo lỗi nếu có.
+| Target | Địa chỉ | Job |
+|---|---|---|
+| Node Exporter vm-web | `192.168.56.11:9100` | `node` |
+| Node Exporter vm-db | `192.168.56.12:9100` | `node` |
+| Node Exporter vm-app | `192.168.56.13:9100` | `node` |
+| Redis Exporter | `192.168.56.12:9121` | `redis` |
+| Nginx HTTP | `http://192.168.56.11:80` | `blackbox-http` |
+| API HTTP | `http://192.168.56.13:8000/health` | `blackbox-http` |
+| Redis TCP | `192.168.56.12:6379` | `blackbox-tcp` |
+| MariaDB TCP | `192.168.56.12:3306` | `blackbox-tcp` |
+
+Các target phụ trợ như `lab-host-1`, cAdvisor và `demo-web` thuộc Docker Desktop/monitoring stack, không phải một trong ba VM Linux.
+
+Nếu Prometheus trong Docker không tới được `192.168.56.x`, kiểm tra kết nối từ máy host và trạng thái mạng host-only của VirtualBox. Không tự ý đổi IP nếu chưa cập nhật Vagrantfile, Prometheus targets và tài liệu.
+
+## 5. Lưu ý Node Exporter và filesystem thử nghiệm
+
+Bản Node Exporter cài bằng `apt` có thể loại trừ các mountpoint dưới `/mnt` và `/media`. Provisioning trong `vagrant/provision/common.sh` cấu hình lại `--collector.filesystem.mount-points-exclude` để filesystem thử nghiệm `/mnt/hkdn-small-disk` có thể được giám sát.
+
+Khi đổi mountpoint thử nghiệm, cần kiểm tra đồng thời:
+- Cấu hình Node Exporter trong `vagrant/provision/common.sh`.
+- Biểu thức luật `DiskSpaceLow` trong `config/alert.rules.yml`.
+- Script `scenarios/vm/02_disk_full_vm.sh`.
+
+## 6. Nhãn metric
+
+Prometheus dùng chung job `node` cho Node Exporter trong Docker và ba VM, phân biệt bằng nhãn `host`:
+
+| Host label | Ý nghĩa |
+|---|---|
+| `lab-host-1` | Node Exporter phụ trợ trong Docker Desktop |
+| `vm-web` | Node Exporter trên 192.168.56.11 |
+| `vm-db` | Node Exporter trên 192.168.56.12 |
+| `vm-app` | Node Exporter trên 192.168.56.13 |
+
+Redis Exporter có nhãn `host="vm-db"` và `service="redis"`. Blackbox HTTP/TCP dùng nhãn `service`, `host` (nếu là VM) và `instance` (địa chỉ được probe).
+
+## 7. Kịch bản lỗi trên VM
+
+Chạy từ thư mục gốc repository bằng Bash (Git Bash hoặc WSL). Các script VM gọi Vagrant thông qua Windows PowerShell theo helper `scenarios/vm/lib_vm.sh`.
+
+| Kịch bản | Lệnh | Tác động | Alert cần kiểm tra |
+|---|---|---|---|
+| CPU cao | `bash scenarios/vm/01_cpu_high_vm.sh` | Chạy stress-ng trên vm-web | `HighCpuUsage` |
+| Disk đầy giả lập | `bash scenarios/vm/02_disk_full_vm.sh` | Tạo filesystem loop 200 MB trên vm-db, ghi khoảng 92% | `DiskSpaceLowSimulated` |
+| Service down – Nginx | `bash scenarios/vm/03_service_down_vm.sh` | Dừng Nginx trên vm-web | `ServiceDown` |
+| Service down – API | `bash scenarios/vm/03_service_down_vm.sh 120 vm-app hkdn-api` | Dừng systemd service hkdn-api trên vm-app | `ServiceDown` |
+| CPU spike ngắn | `bash scenarios/vm/01_cpu_high_vm.sh 30` | Tạo tải CPU 30 giây | Không được chuyển sang `firing` vì `for: 2m` |
+
+### Disk Full giả lập hoạt động như thế nào?
+
+1. Script tạo file image ảo 200 MB trên `vm-db`.
+2. Tạo filesystem ext4 và mount tại `/mnt/hkdn-small-disk`.
+3. Ghi dữ liệu để mức sử dụng dung lượng đạt khoảng 92%.
+4. Xuất metric `hkdn_sim_disk_used_percent` qua Node Exporter Textfile Collector.
+5. Prometheus đánh giá alert `DiskSpaceLowSimulated`.
+6. Script xóa metric, unmount filesystem và xóa file image sau khi thử nghiệm.
+
+Đây là phép thử mô phỏng độc lập. Nó xác minh đường đi của metric Textfile Collector và alert `DiskSpaceLowSimulated`; **không chứng minh** luật `DiskSpaceLow` trên filesystem root `/` đã được kiểm thử thành công.
+
+## 8. Phương pháp đo detection time và resolve time
+
+- **Detection time:** script chỉ bắt đầu tính sau khi thao tác gây lỗi đã hoàn tất và được xác nhận. CPU bắt đầu sau khi stress-ng chạy; Service Down bắt đầu sau khi lệnh stop dịch vụ hoàn tất; Disk Full bắt đầu sau khi metric giả lập được Node Exporter đọc thành công. Script ghi `INJECT` rồi polling Prometheus API mỗi 2 giây. Thời gian kết thúc khi phát hiện alert `firing`.
+- **Resolve time:** script hoàn tất thao tác khôi phục, ghi `RECOVER`, sau đó bắt đầu polling để xác nhận alert không còn `firing`. Resolve time kết thúc ở lần polling đầu tiên xác nhận alert đã hết.
+- Các thời gian là kết quả đo bằng polling, độ phân giải xấp xỉ 2 giây; không phải thời gian Alertmanager gửi thông báo.
+
+Kết quả tổng hợp ở `scenarios/results.md`, log chi tiết ở `scenarios/results/events.log`.
+
+## 9. Lệnh vận hành VM
+
+Từ thư mục `vagrant`:
+
+```bash
+vagrant status
+vagrant halt
+vagrant up
+vagrant provision vm-db
+vagrant ssh vm-web
+vagrant ssh vm-db
+vagrant ssh vm-app
+```
+
+Ví dụ dựng hoặc provision riêng một VM:
+
+```bash
+vagrant up vm-app
+vagrant provision vm-db
+```
+
+## 10. Lưu ý an toàn và trạng thái
+
+- Toàn bộ IP `192.168.56.0/24` là dải lab riêng.
+- Không dùng IP, tên hệ thống, tài khoản hoặc credential thật của VNPT.
+- Không đưa mật khẩu, token hoặc webhook vào Git.
+- Baseline Linux VM gần nhất: 18 giờ, từ 2026-11-18 21:06 UTC đến 2026-11-19 15:06 UTC, step 60 giây, 1081 mẫu/chuỗi. Chi tiết ở `docs/baseline_result.md`.
+- Các kịch bản lặp lại gần nhất: Service Down vm-web 3/3; CPU High vm-web 2/2; Disk Full giả lập vm-db 3/3. Xem `scenarios/results.md` để phân biệt kết quả mới với các lần thử lịch sử.

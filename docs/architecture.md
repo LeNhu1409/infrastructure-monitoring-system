@@ -6,161 +6,200 @@
 
 File nguồn để chỉnh sửa: `docs/architecture.drawio` (mở bằng draw.io).
 
-Sơ đồ có hai vùng. Vùng Docker Compose chạy Prometheus, Alertmanager, Grafana và các exporter của lab. Vùng VirtualBox + Vagrant gồm 3 máy ảo Ubuntu 22.04 (`vm-web`, `vm-db`, `vm-app`) trong mạng host-only 192.168.56.0/24, có dịch vụ đa dạng theo hướng dẫn của giảng viên. Prometheus scrape exporter trên VM qua IP riêng (nét liền), Blackbox Exporter probe dịch vụ trên VM (nét đứt). Chi tiết dựng VM: `docs/vm-environment.md`.
+Kiến trúc có hai vùng triển khai:
 
-## Thành phần
+1. **VirtualBox + Vagrant:** ba VM Ubuntu 22.04 trong mạng host-only `192.168.56.0/24`, là nhóm máy chủ Linux chính được giám sát.
+2. **Docker Compose trên Docker Desktop (WSL2):** chạy Prometheus, Grafana, Alertmanager, Blackbox Exporter và các exporter phụ trợ.
+
+Prometheus scrape Node Exporter trên cả ba VM qua mạng host-only. Blackbox Exporter probe HTTP tới Nginx/API và TCP tới Redis/MariaDB. Node Exporter `lab-host-1` cùng cAdvisor là các target phụ trợ của môi trường Docker Desktop/container; không nên nhầm chúng với ba VM Linux chính.
+
+## 1. Máy chủ và dịch vụ được giám sát
+
+| VM | IP host-only | Dịch vụ | Exporter / kiểm tra |
+|---|---|---|---|
+| `vm-web` | `192.168.56.11` | Nginx :80 | Node Exporter :9100; HTTP probe |
+| `vm-db` | `192.168.56.12` | Redis :6379; MariaDB :3306 | Node Exporter :9100; Redis Exporter :9121; TCP probe :6379 và :3306 |
+| `vm-app` | `192.168.56.13` | Python API :8000, endpoint `/health`, systemd `hkdn-api` | Node Exporter :9100; HTTP probe |
+
+Mỗi VM được cấp 1 CPU và 1 GB RAM theo cấu hình lab hiện tại. Chi tiết provisioning và lệnh vận hành: `docs/vm-environment.md`.
+
+## 2. Thành phần monitoring stack
 
 | Thành phần | Vai trò | Cổng |
 |---|---|---|
 | Prometheus | Thu thập metric, lưu chuỗi thời gian, đánh giá luật cảnh báo | 9090 |
-| Node Exporter (trong Docker) | Metric của VM Docker Desktop (WSL2): CPU, RAM, disk, network, uptime | 9100 (nội bộ) |
-| cAdvisor | Metric theo container | 8080 |
-| Blackbox Exporter | Kiểm tra endpoint HTTP và cổng TCP (UP/DOWN, thời gian phản hồi) | 9115 (nội bộ) |
+| Node Exporter (Docker) | Metric của môi trường Docker Desktop/WSL2, nhãn `host="lab-host-1"` | 9100 nội bộ |
+| Node Exporter (3 VM) | CPU, RAM, filesystem, network, uptime của từng VM | 9100 trên mỗi VM |
+| Redis Exporter | Metric Redis trên `vm-db` | 9121 |
+| cAdvisor | Metric theo container Docker | 8080 |
+| Blackbox Exporter | Probe endpoint HTTP và cổng TCP | 9115 nội bộ |
 | Alertmanager | Gom nhóm, giảm nhiễu, định tuyến cảnh báo | 9093 |
-| Grafana | Dashboard theo host/service, xem lịch sử cảnh báo | 3000 |
-| demo-web (nginx) | Dịch vụ mẫu bị giám sát (trong Docker) | 8081 |
-| `vm-web` (192.168.56.11) | nginx; Node Exporter | 80; 9100 |
-| `vm-db` (192.168.56.12) | Redis, MariaDB; Node Exporter, Redis Exporter | 6379, 3306; 9100, 9121 |
-| `vm-app` (192.168.56.13) | API Python (`/health`, dịch vụ systemd `hkdn-api`); Node Exporter | 8000; 9100 |
+| Grafana | Dashboard theo host/service và trạng thái cảnh báo | 3000 |
+| demo-web (nginx) | Dịch vụ mẫu trong Docker, dùng cho kiểm thử phụ trợ | 8081 ra host |
 
-## Luồng dữ liệu
+Node Exporter `lab-host-1` và cAdvisor chỉ nên được xem là phần giám sát bổ sung cho Docker Desktop. Đối tượng máy chủ chính trong phạm vi đề tài hiện là `vm-web`, `vm-db`, `vm-app`.
 
-1. Exporter phơi bày metric; Prometheus scrape mỗi 15 giây, gồm exporter trong Docker và exporter trên 3 VM (qua IP 192.168.56.x). Blackbox Exporter probe HTTP/TCP tới dịch vụ trong Docker và trên VM, Prometheus lấy kết quả probe.
-2. Prometheus đánh giá `config/alert.rules.yml`; điều kiện đúng quá thời gian `for:` thì chuyển `pending` -> `firing` và gửi sang Alertmanager.
-3. Alertmanager gom nhóm theo `alertname` và `instance` (`group_wait` 10s, `group_interval` 1m, `repeat_interval` 1h). Quy tắc ức chế: khi có cảnh báo `critical`, cảnh báo `warning` cùng `alertname` và `instance` bị bỏ qua. Cảnh báo được gửi tới receiver `default` (chưa gửi ra ngoài, xem trên UI :9093).
-4. Grafana truy vấn Prometheus để hiển thị dashboard (`dashboards/host-service-overview.json`) và lịch sử cảnh báo qua metric `ALERTS`.
+## 3. Luồng dữ liệu
 
-## Quy ước metric/nhãn
+1. Exporter phơi bày metric. Prometheus scrape mỗi 15 giây, gồm Node Exporter trên ba VM, Redis Exporter và các exporter phụ trợ trong Docker.
+2. Blackbox Exporter thực hiện HTTP probe tới demo-web, Nginx, API; TCP probe tới Redis và MariaDB. Prometheus thu thập kết quả `probe_success` và thời gian probe.
+3. Prometheus đánh giá `config/alert.rules.yml`; khi điều kiện đúng liên tục đủ thời gian `for:`, alert chuyển `pending` → `firing` và được gửi sang Alertmanager.
+4. Alertmanager gom nhóm theo `alertname` và `instance` (`group_wait` 10s, `group_interval` 1m, `repeat_interval` 1h). Khi có cảnh báo `critical`, cảnh báo `warning` cùng `alertname` và `instance` bị inhibit.
+5. Alertmanager hiện dùng receiver `default`; chưa cấu hình gửi email/chat ra ngoài. Cảnh báo có thể xem trên UI `http://localhost:9093`.
+6. Grafana truy vấn Prometheus để hiển thị dashboard `dashboards/host-service-overview.json` và trạng thái alert qua metric `ALERTS`.
 
-| Job | Nhãn gắn thêm | Ghi chú |
+## 4. Quy ước metric và nhãn
+
+| Job | Nhãn | Ghi chú |
 |---|---|---|
-| `prometheus` | – | Prometheus tự giám sát chính nó |
-| `node` | `host="lab-host-1"` | Metric VM Docker Desktop (WSL2) |
-| `node` | `host="vm-web"`, `"vm-db"`, `"vm-app"` | Metric 3 VM, dùng chung job `node` để dashboard và luật áp dụng cho mọi host |
-| `redis` | `host="vm-db"`, `service="redis"` | Redis Exporter :9121 trên `vm-db` |
-| `cadvisor` | – | Phân biệt container bằng nhãn `name` của cAdvisor |
-| `blackbox-http` | `service="demo-web"` / `"nginx"` / `"api"`, `host` (với VM), `instance=<URL probe>` | Thêm dịch vụ: thêm URL vào targets, gắn nhãn `service` |
-| `blackbox-tcp` | `service="redis"` / `"mariadb"`, `host="vm-db"` | Probe cổng 6379 và 3306; luật `ServiceDown` hiện chỉ xét `blackbox-http` |
+| `prometheus` | – | Prometheus tự giám sát |
+| `node` | `host="lab-host-1"` | Node Exporter phụ trợ trong Docker Desktop |
+| `node` | `host="vm-web"`, `vm-db`, `vm-app` | Node Exporter của ba VM; dùng chung job `node` |
+| `redis` | `host="vm-db"`, `service="redis"` | Redis Exporter :9121 |
+| `cadvisor` | – | Metric container; nhãn container do cAdvisor cung cấp |
+| `blackbox-http` | `service="demo-web"` / `nginx` / `api`; `host` với VM; `instance` là URL probe | Probe HTTP |
+| `blackbox-tcp` | `service="redis"` / `mariadb`, `host="vm-db"` | Probe TCP cổng 6379 và 3306 |
 
-- `severity`: `warning` hoặc `critical`. Cảnh báo cùng loại ở hai mức dùng chung `alertname` để quy tắc ức chế hoạt động.
-- Metric giả lập dùng tiền tố `hkdn_sim_` (xem `scenarios/02_disk_full.sh`).
+`severity` dùng `warning` hoặc `critical`. Các mức cảnh báo của cùng một loại dùng chung `alertname` để hỗ trợ inhibit. Metric disk giả lập có tên `hkdn_sim_disk_used_percent`, được xuất qua Node Exporter Textfile Collector trên `vm-db`.
 
-## Giới hạn đã biết
+## 5. Các luật cảnh báo đang cấu hình
 
-- Node Exporter chạy trong Docker Desktop nên CPU, RAM, disk là của VM WSL2, không phải máy Windows; metric network là của container (chế độ bridge). Đo host Windows cần thêm windows_exporter (tùy chọn); trên Linux có thể dùng `network_mode: host`.
-- Ngưỡng cảnh báo CPU, RAM, disk là bản đề xuất tạm theo baseline sơ bộ (xem mục Baseline), chờ thống nhất với UTH và mentor VNPT; việc áp ngưỡng vào `config/alert.rules.yml` do thành viên phụ trách cảnh báo thực hiện.
-- Receiver mặc định chưa gửi ra ngoài (email/chat); cảnh báo chỉ xem trên giao diện Alertmanager và Grafana.
-- Cấu hình 3 VM chưa được chạy thử trên máy thật của nhóm, và baseline hiện có là của môi trường Docker Desktop, cần đo lại cho từng VM (xem `docs/vm-environment.md`).
-- Dữ liệu Prometheus lưu 15 ngày; lab là prototype trên một máy host (Prometheus, Grafana trong Docker, 3 VM VirtualBox), không có HA.
-- Chưa kết nối nền tảng quản trị trung tâm dữ liệu thật; chỉ dùng môi trường lab của nhóm, không dùng credential sản xuất.
+Cấu hình hiện tại có **9 rule** trong `config/alert.rules.yml`:
 
-## Kịch bản lỗi
+| Alert | Điều kiện | `for:` | Phạm vi |
+|---|---|---:|---|
+| `NodeExporterDown` | `up{job="node",host=~"vm-web|vm-db|vm-app"} == 0` | 1m | Node Exporter của 3 VM |
+| `ServiceDown` | `probe_success{job="blackbox-http"} == 0` | 30s | HTTP probe |
+| `HighCpuUsage` – warning | CPU > 70% | 2m | 3 VM |
+| `HighCpuUsage` – critical | CPU > 90% | 2m | 3 VM |
+| `HighMemoryUsage` – warning | RAM > 80% | 5m | 3 VM |
+| `HighMemoryUsage` – critical | RAM > 90% | 5m | 3 VM |
+| `DiskSpaceLow` – warning | Disk root `/` > 80%, ext4 | 5m | 3 VM |
+| `DiskSpaceLow` – critical | Disk root `/` > 90%, ext4 | 5m | 3 VM |
+| `DiskSpaceLowSimulated` | `hkdn_sim_disk_used_percent > 80` | 1m | Metric giả lập trên `vm-db` |
 
-Ba kịch bản lỗi và một kịch bản cảnh báo giả trong `scenarios/` dùng chung `lib.sh`: mỗi kịch bản gây lỗi, thăm dò Prometheus API (`/api/v1/query`, truy vấn `ALERTS`) mỗi 2 giây, ghi sự kiện vào `scenarios/results/events.log` (INJECT, DETECTED/NOT_DETECTED, RECOVER, RESOLVED, DONE), rồi khôi phục.
+Các ngưỡng CPU 70/90%, RAM 80/90% và Disk 80/90% là ngưỡng đề xuất đang dùng trong prototype, chưa phải ngưỡng production hoặc ngưỡng đã được mentor phê duyệt. Baseline thấp không tự nó chứng minh các ngưỡng này là tối ưu; cần tiếp tục kiểm thử và xin xác nhận.
 
-| Kịch bản | Cách gây lỗi | Cảnh báo kỳ vọng | Ghi chú |
+**Phạm vi cảnh báo dịch vụ:** `ServiceDown` hiện chỉ xét `job="blackbox-http"`. Redis/MariaDB có TCP probe trong Prometheus nhưng hiện chưa được luật `ServiceDown` bao phủ. `NodeExporterDown` hiện lọc ba VM, không áp dụng cho target `lab-host-1`.
+
+## 6. Kịch bản lỗi
+
+Các kịch bản VM nằm trong `scenarios/vm/`; kịch bản Docker nằm trong `scenarios/`.
+
+| Kịch bản VM | Cách gây lỗi | Alert kỳ vọng | Lưu ý |
 |---|---|---|---|
-| `01_cpu_high.sh` (mặc định 300s) | `docker run` container `hkdn-stress-cpu` (alpine) chạy vòng lặp chiếm toàn bộ CPU | `HighCpuUsage` | Số vòng lặp bằng số core của máy chạy script |
-| `02_disk_full.sh` (mặc định 300s) | Chế độ `textfile`: ghi `hkdn_sim_disk_used_percent=92` vào `scenarios/textfile/sim_disk.prom`; chế độ `loop` (chỉ Linux, cần sudo): ổ ext4 200MB lấp ~92% | `DiskSpaceLowSimulated` (textfile), `DiskSpaceLow` (loop) | Docker Desktop tự chuyển sang `textfile`; không đụng ổ đĩa thật. `for:` của luật giả lập ngắn hơn thời gian chạy để kịp firing |
-| `03_service_down.sh` (mặc định 120s) | `docker stop hkdn-demo-web` | `ServiceDown` | Blackbox probe báo `probe_success=0` |
-| `01_cpu_high.sh 30` (cảnh báo giả) | Tăng CPU 30 giây, ngắn hơn `for:` của luật | `HighCpuUsage` chỉ ở trạng thái `pending`, không `firing` | Chứng minh tăng đột biến ngắn không gây cảnh báo giả |
+| CPU High | Chạy `stress-ng` trên `vm-web` | `HighCpuUsage` | Script xác nhận stress-ng chạy rồi mới bắt đầu tính detection time |
+| Disk Full giả lập | Tạo filesystem loop 200 MB trên `vm-db`, ghi dữ liệu khoảng 92%, xuất `hkdn_sim_disk_used_percent` qua Textfile Collector | `DiskSpaceLowSimulated` | Không làm đầy root filesystem; không phải kiểm thử thành công `DiskSpaceLow` |
+| Service Down | Dừng Nginx trên `vm-web` hoặc `hkdn-api` trên `vm-app` | `ServiceDown` | HTTP probe thất bại |
+| Cảnh báo giả CPU | Chạy tải CPU 30 giây | Không được chuyển `HighCpuUsage` sang `firing` | Điều kiện ngắn hơn `for: 2m` |
 
-Thời gian phát hiện (`detection_time`) đo từ lúc gây lỗi xong đến khi cảnh báo `firing` trên Prometheus, độ phân giải ~2s; chưa gồm `group_wait` của Alertmanager. Kết quả từng lần chạy ghi ở `scenarios/results.md`.
+### Phương pháp đo detection/resolve time
 
-Trên máy ảo có bộ kịch bản tương ứng trong `scenarios/vm/` (chạy qua `vagrant ssh`): CPU cao bằng stress-ng trên `vm-web`, disk đầy bằng ổ loop 200MB trên `vm-db`, dừng nginx trên `vm-web` hoặc `hkdn-api` trên `vm-app` để gây `ServiceDown`. Bảng kịch bản trong `docs/vm-environment.md`.
+Các script VM đặt mốc `START` sau khi thao tác gây lỗi đã hoàn tất và được xác nhận:
+- CPU: sau khi `stress-ng` được khởi chạy và script xác nhận service đang active.
+- Service Down: sau khi lệnh dừng dịch vụ hoàn tất.
+- Disk Full: sau khi tạo filesystem, ghi dữ liệu và xác nhận metric Textfile Collector đã được Node Exporter đọc.
 
-## Baseline và cơ sở đặt ngưỡng
+Ngay sau mốc `START`, script ghi `INJECT` rồi gọi `wait_for_alert`, truy vấn Prometheus API mỗi 2 giây. **Detection time** là thời gian từ mốc `START` này đến lần polling đầu tiên thấy alert `firing`. Vì vậy, không mô tả detection time là thời gian từ lúc bắt đầu chạy script hoặc từ lúc bắt đầu thao tác gây lỗi.
 
-Nguyên tắc: không đặt ngưỡng tùy ý trước khi đo. Baseline được đo bằng `tools/Baseline/baseline.py`, gọi Prometheus API (`/api/v1/query_range`, step 15s) với đúng biểu thức của dashboard `host-service-overview`. Kết quả đầy đủ ở `docs/baseline_result.md`.
+Sau khi thao tác khôi phục hoàn tất, script ghi `RECOVER` rồi bắt đầu `wait_for_resolved`. **Resolve time** là thời gian từ lúc bắt đầu chờ sau `RECOVER` đến lần polling đầu tiên xác nhận alert không còn `firing`. Đây là thời gian đo bằng polling, độ phân giải xấp xỉ 2 giây; không bao gồm thời gian Alertmanager gửi thông báo tới receiver.
 
-Tái lập (chạy từ thư mục gốc repo, lab đã chạy ổn định và chưa bơm lỗi):
+Kết quả từng lần chạy được tổng hợp tại `scenarios/results.md`; log chi tiết ở `scenarios/results/events.log`.
 
-    python tools\Baseline\baseline.py --hours 24 --step 15 --out docs\baseline_result.md
+## 7. Baseline Linux VM và cơ sở đặt ngưỡng
 
-**Phạm vi đo:** 24 giờ liên tục, từ 05:56 UTC ngày 08/11/2026 đến 05:56 UTC ngày 09/11/2026 (12:56 ngày 08/11 đến 12:56 ngày 09/11 giờ Việt Nam, tức chiều Chủ nhật đến trưa thứ Hai), 5761 mẫu mỗi chuỗi (đủ, không đứt đoạn), step 15s. Lab nhàn rỗi, không chạy kịch bản và không khởi động lại container trong khoảng đo. Baseline phủ một chu kỳ ngày (có cả ban đêm) nhưng chỉ một ngày duy nhất. Kết quả khớp với lần đo 4 giờ trước đó (09:14 đến 13:14 UTC ngày 06/11: CPU p50 0,254%, RAM p99 15,1%), cho thấy baseline lặp lại ổn định.
+Baseline hiện tại được thu thập trên ba Linux VM, không phải baseline cũ của Docker Desktop/WSL2.
 
-| Chỉ số | avg | p50 | p99 | max | Nhận xét |
-|---|---|---|---|---|---|
-| CPU (%) | 0,261 | 0,262 | 0,443 | 3,517 | Lab gần như rảnh, chỉ có đỉnh ngắn 3,5% |
-| RAM (%) | 15,383 | 15,646 | 16,443 | 17,091 | Dao động hẹp (~15 đến 17%) |
-| Disk `/var/lib` (%) | 7,587 | 7,587 | 7,591 | 7,592 | Gần như không đổi nên phân vị không có ý nghĩa |
-| Network nhận (B/s) | 41,6 | 41,6 | 41,6 | 42,5 | Lưu lượng gần bằng 0, là của VM Docker Desktop |
-| Network gửi (B/s) | 1025,4 | 1025,8 | 1029,4 | 1031,9 | Như trên |
-| Thời gian probe demo-web (s) | 0,002 | 0,002 | 0,003 | 0,099 | Probe thành công 100% (UP); max 0,099 s là đỉnh hiếm gặp (p99 vẫn 0,003 s) |
+- Khoảng đo: **2026-11-18 21:06 UTC → 2026-11-19 15:06 UTC** (18 giờ).
+- Step: **60 giây**.
+- Số mẫu: **1081 mẫu/chuỗi/host**.
+- Phạm vi: `vm-web`, `vm-db`, `vm-app`.
+- Disk: chỉ filesystem root `/`, ext4; loại bỏ shared folder `/vagrant`.
+- Điều kiện: vận hành bình thường, không bơm lỗi.
+- Báo cáo đầy đủ: `docs/baseline_result.md`.
 
-**Ngưỡng đề xuất (bản nháp, chờ thống nhất với UTH và mentor VNPT):**
+### CPU (%)
 
-| Chỉ số | Warning | Critical | `for:` | Cơ sở |
-|---|---|---|---|---|
-| CPU | 70% | 90% | 2m | Baseline rất thấp nên có khoảng dư lớn, ngưỡng theo mức vận hành thông thường. `for:` cân bằng giữa phát hiện nhanh và cảnh báo giả (kết quả NAB cho thấy `for:` dài làm mất đỉnh ngắn), kiểm chứng bằng kịch bản cảnh báo giả (CPU 30 giây không được `firing`) |
-| RAM | 80% | 90% | 5m | Baseline p99 16,4%, dư gấp nhiều lần |
-| Disk | 80% | 90% | 5m | Giá trị gần như không đổi nên dùng ngưỡng tuyệt đối; chỉ xét mountpoint `/var/lib` (và `/mnt/hkdn-small-disk` cho chế độ `loop`), nhóm cần xác nhận |
-| Disk giả lập | 80% | | 1m | Kịch bản ghi giá trị 92; `for:` 1 phút để kịp `firing` trong 300 giây chạy |
-| ServiceDown | `probe_success == 0` | | 30s | Probe UP 100% trong thời gian đo |
-| NodeExporterDown | `up == 0` | | 1m | Luật sống/chết, không cần ngưỡng |
-| Network | không đặt ngưỡng | | | Lưu lượng gần bằng 0, chưa có cơ sở |
+| Host | avg | p50 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| vm-app | 3.483 | 3.164 | 4.073 | 6.064 | 13.744 |
+| vm-db | 3.756 | 3.424 | 4.351 | 6.415 | 12.764 |
+| vm-web | 3.639 | 3.304 | 4.220 | 6.326 | 13.712 |
 
-Baseline cho biết khoảng dư rất lớn nên không suy ra trực tiếp được mức ngưỡng. Ngưỡng 70/80/90 là mức vận hành thông thường (tham khảo các tài liệu ở mục Tài liệu tham khảo), sẽ được kiểm chứng bằng kịch bản và chỉnh sau khi thống nhất với UTH và mentor VNPT.
+### RAM (%)
 
-**Lưu ý khi đọc baseline:**
-- Node Exporter chạy trong Docker Desktop (WSL2) nên số đo là của VM, không phải máy Windows.
-- Bảng disk trong `docs/baseline_result.md` có nhiều dòng trùng do Docker Desktop mount cùng một ổ nhiều lần (`/mnt/host/...`, `/parent-distro/...`, `/run/desktop/...`). Luật disk cần giới hạn theo mountpoint cụ thể (nhóm sẽ chốt), để tránh cảnh báo trùng. Ổ C (~64%) và ổ D (~79%) là ổ của máy Windows, nằm ngoài phạm vi giám sát của lab; ổ D sát ngưỡng warning 80% nên không được đưa vào luật.
-- Các bảng CPU/RAM theo container đang không có dữ liệu: cAdvisor trên Docker Desktop báo lỗi đọc lớp image của container, đang xử lý.
+| Host | avg | p50 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| vm-app | 36.661 | 36.949 | 37.300 | 37.318 | 37.343 |
+| vm-db | 43.365 | 43.592 | 43.888 | 43.910 | 43.935 |
+| vm-web | 36.112 | 36.333 | 36.783 | 36.805 | 36.847 |
 
-## Kiểm chứng phương pháp đặt ngưỡng bằng NAB
+### Disk root `/` (%)
 
-Dùng Numenta Anomaly Benchmark (NAB, nguồn dữ liệu do VNPT đề xuất) để so sánh các cách đặt ngưỡng và `for:` trên chuỗi CPU có nhãn bất thường. Dữ liệu và nhãn lấy từ repo NAB (`data/`, `labels/combined_windows.json`); phương pháp đánh giá là của nhóm. Script: `tools/nab_threshold_eval.py`, kết quả: `docs/nab_result.md`. Cách làm: lấy các phân vị p90, p95, p99, p99.9 và max của đoạn bình thường làm ngưỡng ứng viên; đếm số cửa sổ bất thường bắt được và số đợt cảnh báo giả (đợt vượt ngưỡng bắt đầu ngoài cửa sổ bất thường). Tùy chọn yêu cầu vượt liên tục N điểm để mô phỏng `for:`.
+| Host | avg | p50 | p95 | p99 | max |
+|---|---:|---:|---:|---:|---:|
+| vm-app | 4.955 | 4.964 | 4.966 | 4.966 | 4.966 |
+| vm-db | 5.743 | 5.736 | 5.754 | 5.758 | 5.758 |
+| vm-web | 4.934 | 4.933 | 4.935 | 4.935 | 5.297 |
 
-Tái lập (NAB clone ngoài repo):
+### Network và HTTP probe
 
-    git clone --depth 1 https://github.com/numenta/NAB.git D:\nab\NAB
-    python tools\nab_threshold_eval.py --nab D:\nab\NAB realAWSCloudwatch/ec2_cpu_utilization_5f5533.csv realAWSCloudwatch/ec2_cpu_utilization_825cc2.csv
+- Network nhận trung bình: vm-app 599.730 B/s; vm-db 484.666 B/s; vm-web 434.627 B/s. Có spike ngắn nên max cao hơn nhiều so với p95.
+- Network gửi trung bình: vm-app 1161.256 B/s; vm-db 1457.973 B/s; vm-web 1168.284 B/s.
+- HTTP probe duration trung bình khoảng 0.004 giây cho cả API và Nginx; max 0.009 giây.
+- HTTP probe success: 100% (1081/1081 mẫu cho mỗi dịch vụ trong khoảng đo).
+
+### Ngưỡng đề xuất hiện áp dụng
+
+| Chỉ số | Warning | Critical | `for:` | Ghi chú |
+|---|---:|---:|---:|---|
+| CPU | 70% | 90% | 2m | Ngưỡng đề xuất; kiểm thử CPU 30 giây không được firing |
+| RAM | 80% | 90% | 5m | Ngưỡng đề xuất |
+| Disk root | 80% | 90% | 5m | Chỉ mountpoint `/`, fstype ext4 |
+| Disk giả lập | >80% | – | 1m | Dùng metric mô phỏng để demo |
+| ServiceDown | probe_success = 0 | – | 30s | Chỉ HTTP |
+| NodeExporterDown | up = 0 | – | 1m | Chỉ ba VM |
+
+Baseline 18 giờ cho thấy tài nguyên ở trạng thái lab tương đối ổn định, nhưng chưa đại diện cho chu kỳ dài hạn. Step 60 giây có thể bỏ qua biến động ngắn. Các ngưỡng trên không được tính trực tiếp từ p95/p99; đây là ngưỡng đề xuất để thử nghiệm và cần mentor xác nhận.
+
+Tái lập baseline (chạy từ thư mục gốc repo, Prometheus đang hoạt động):
+
+```bash
+python tools/Baseline/baseline.py --prom http://localhost:9090 --hours 18 --step 60 --out docs/baseline_result.md
+```
+
+## 8. Kiểm chứng phương pháp đặt ngưỡng bằng NAB
+
+Dùng Numenta Anomaly Benchmark (NAB) để so sánh các cách đặt ngưỡng và `for:` trên chuỗi CPU có nhãn bất thường. Dữ liệu và nhãn lấy từ repo NAB (`data/`, `labels/combined_windows.json`); phương pháp đánh giá là của nhóm. Script: `tools/nab_threshold_eval.py`, kết quả: `docs/nab_result.md`.
 
 Kết quả chính (mỗi chuỗi 4032 điểm):
 
 | Chuỗi | Ngưỡng | Giá trị | N=1: bắt / giả | N=3: bắt / giả |
-|---|---|---|---|---|
-| 5f5533 (nền ~43%, 2 cửa sổ) | p90 | 49,1 | 2/2 / 357 | 1/2 / 0 |
-| | p99 | 53,3 | 2/2 / 37 | 0/2 / 0 |
-| | p99.9 | 54,9 | 2/2 / 4 | 0/2 / 0 |
-| | max | 56,4 | 2/2 / 0 | 0/2 / 0 |
-| 825cc2 (nền ~92%, 1 cửa sổ) | p90 | 95,6 | 1/1 / 259 | 0/1 / 23 |
-| | p99 | 97,2 | 1/1 / 33 | 0/1 / 0 |
-| | p99.9 | 98,2 | 1/1 / 4 | 0/1 / 0 |
-| | max | 99,1 | 0/1 / 0 | 0/1 / 0 |
+|---|---|---:|---:|---:|
+| 5f5533 (nền ~43%, 2 cửa sổ) | p90 | 49.1 | 2/2 / 357 | 1/2 / 0 |
+|  | p99 | 53.3 | 2/2 / 37 | 0/2 / 0 |
+|  | p99.9 | 54.9 | 2/2 / 4 | 0/2 / 0 |
+|  | max | 56.4 | 2/2 / 0 | 0/2 / 0 |
+| 825cc2 (nền ~92%, 1 cửa sổ) | p90 | 95.6 | 1/1 / 259 | 0/1 / 23 |
+|  | p99 | 97.2 | 1/1 / 33 | 0/1 / 0 |
+|  | p99.9 | 98.2 | 1/1 / 4 | 0/1 / 0 |
+|  | max | 99.1 | 0/1 / 0 | 0/1 / 0 |
 
-Rút ra:
-- Ngưỡng thấp (p90, p95) cho hàng trăm đợt cảnh báo giả. Ngưỡng cao hơn giảm cảnh báo giả nhưng ngưỡng quá sát đỉnh (max ở `825cc2`) bỏ sót cửa sổ bất thường.
-- Yêu cầu vượt liên tục 3 điểm (~15 phút) giảm mạnh cảnh báo giả (về 0 ở hầu hết các ngưỡng) nhưng hầu như không bắt được cửa sổ nào (tối đa 1/2 ở p90 của `5f5533`), vì bất thường trong NAB chủ yếu là đỉnh ngắn. `for:` dài giảm cảnh báo giả nhưng làm chậm hoặc mất phát hiện, cần cân bằng.
-- Hai chuỗi có mức nền rất khác nhau (43% và 92%), nên ngưỡng phải dựa trên baseline của từng hệ thống.
+NAB chỉ dùng để kiểm chứng phương pháp, không dùng số của NAB làm ngưỡng cho lab. NAB lấy mẫu 5 phút/điểm, lab 15 giây/điểm; số điểm liên tục không tương đương trực tiếp với thời gian `for:` trong lab. Ngưỡng ứng viên được tính trên chính chuỗi dùng để đánh giá nên kết quả có thể lạc quan.
 
-Lưu ý khi dùng kết quả:
-- NAB chỉ dùng để kiểm chứng phương pháp, không dùng số của NAB làm ngưỡng cho lab. Ngưỡng của lab lấy từ baseline Prometheus ở trên.
-- NAB lấy mẫu 5 phút/điểm, lab 15 giây/điểm, nên "N điểm" của NAB không tương đương `for:` của luật.
-- Cửa sổ bất thường của NAB khá rộng, "bắt được cửa sổ" là thước đo tương đối dễ. Chỉ dùng để so sánh các ngưỡng với nhau, không coi là độ chính xác tuyệt đối.
-- Ngưỡng ứng viên được tính trên chính chuỗi dùng để đánh giá (không tách tập huấn luyện và kiểm thử), nên kết quả hơi lạc quan.
+## 9. Giới hạn và bước tiếp theo
 
-## Hạn chế và bước tiếp theo
+- Baseline mới có 18 giờ, chưa phủ đủ ngày thường/cuối tuần hoặc tải dài hạn.
+- Step 60 giây có thể bỏ qua biến động ngắn.
+- Lab chạy trên một host, chưa có HA.
+- cAdvisor trên Docker Desktop có thể không cung cấp đầy đủ metric container; cần xem đây là phần phụ trợ.
+- `DiskSpaceLowSimulated` không thay thế kiểm thử `DiskSpaceLow` trên root filesystem thật.
+- `ServiceDown` hiện chỉ xét HTTP, chưa cảnh báo TCP Redis/MariaDB.
+- Alertmanager chưa gửi email/chat ra ngoài.
+- Chưa kết nối hệ thống NOC/DCIM thật và không sử dụng credential production.
 
-**Hạn chế:**
-- Baseline đo trong 24 giờ liên tục (5761 mẫu mỗi chuỗi) nhưng chỉ một ngày (chiều Chủ nhật đến trưa thứ Hai), chưa phủ ngày thường và cuối tuần.
-- Lab gần như không có tải, nên baseline chỉ cho biết khoảng dư lớn, chưa phản ánh tải thực của máy chủ.
-- Số đo là của VM Docker Desktop (WSL2), không phải máy Windows hay máy chủ thật.
-- Metric theo container (cAdvisor) chưa có dữ liệu trên Docker Desktop nên panel CPU/RAM theo container đang trống.
-- Ngưỡng tĩnh bắt không tốt các đỉnh ngắn (theo kết quả NAB).
-- Receiver Alertmanager chưa gửi ra ngoài (email/chat), chưa kết nối nền tảng quản trị trung tâm dữ liệu thật.
-- Prototype một máy, không có HA, dữ liệu Prometheus lưu 15 ngày.
+## 10. Tài liệu tham khảo
 
-**Bước tiếp theo:**
-- Chốt ngưỡng cùng UTH và mentor VNPT; nếu còn thời gian, đo thêm vài ngày (gồm ngày thường và cuối tuần), loại đoạn chạy kịch bản.
-- Chạy mỗi kịch bản 3 lần, ghi thời gian phát hiện và minh chứng vào `scenarios/results.md`.
-- Chốt mountpoint disk cho luật và dashboard, sửa panel container (cAdvisor).
-- Cân nhắc ngưỡng động (theo trung bình trượt, độ lệch chuẩn) hoặc dự báo bằng Python cho CPU, disk.
-- Bổ sung kênh gửi cảnh báo (email/chat) và cảnh báo độ trễ probe nếu cần.
-- Thử thêm dữ liệu public khác (Google Cluster Data) để kiểm chứng ngưỡng.
-
-## Tài liệu tham khảo
-
-- Ahmad, S., Lavin, A., Purdy, S., Agha, Z. (2017). "Unsupervised real-time anomaly detection for streaming data". Neurocomputing. Dữ liệu: https://github.com/numenta/NAB
-- Prometheus, hướng dẫn viết cảnh báo (Alerting best practices): https://prometheus.io/docs/practices/alerting/
-- Google SRE Book, chương "Monitoring Distributed Systems": https://sre.google/sre-book/monitoring-distributed-systems/
+- Ahmad, S., Lavin, A., Purdy, S., Agha, Z. (2017). “Unsupervised real-time anomaly detection for streaming data”. Dữ liệu: https://github.com/numenta/NAB
+- Prometheus, Alerting best practices: https://prometheus.io/docs/practices/alerting/
+- Google SRE Book, “Monitoring Distributed Systems”: https://sre.google/sre-book/monitoring-distributed-systems/
