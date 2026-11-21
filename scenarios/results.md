@@ -1,4 +1,4 @@
-﻿# Kết quả thử nghiệm hệ thống giám sát - N4.7
+# Kết quả thử nghiệm hệ thống giám sát - N4.7
 
 > Nguồn dữ liệu: `scenarios/results/events.log`.
 > Báo cáo tổng hợp các lần kiểm thử trên Docker và Linux VM.
@@ -14,7 +14,7 @@
   - `vm-app`: Python API.
 - Chu kỳ scrape Prometheus: 15 giây.
 - Baseline gần nhất: 18 giờ, bước lấy mẫu 60 giây.
-- Thời gian kiểm thử: 06/11/2026 – 19/11/2026.
+- Thời gian kiểm thử: 06/11/2026 – 21/11/2026.
 
 ### Phương pháp ghi nhận
 
@@ -47,8 +47,8 @@
 | vm-web - CPU High 30 giây | Không phát hiện | Trong 30 giây | Không áp dụng | Không đủ thời gian duy trì điều kiện |
 | vm-app - API Down | Thành công | 51 giây | 33 giây | ServiceDown |
 
-### 3.2. Kiểm thử lặp lại ngày 19/11/2026
-
+### 3.2. Các đợt kiểm thử lặp lại gần nhất
+Service Down và Disk Full giả lập được kiểm thử lặp lại ngày 19/11/2026; CPU High được kiểm thử bổ sung ngày 21/11/2026.
 #### Service Down - vm-web (Nginx)
 
 | Lần thử | Detection time | Resolve time | Kết quả |
@@ -64,7 +64,8 @@
 |---|---:|---:|---|
 | 1 | 169 giây | 30 giây | Thành công |
 | 2 | 173 giây | 35 giây | Thành công |
-| **Trung bình** | **171 giây** | **32,5 giây** | **2/2** |
+| 3 | 171 giây | 31 giây | Thành công |
+| **Trung bình** | **171 giây** | **32 giây** | **3/3** |
 
 #### Disk Full giả lập - vm-db
 
@@ -99,13 +100,13 @@ Kết quả cho thấy cơ chế giám sát tình trạng dịch vụ HTTP hoạ
 
 ### 4.2. Khả năng phát hiện CPU High
 
-- Hai lần kiểm thử lặp lại gần nhất đều phát hiện `HighCpuUsage`.
+- Ba lần kiểm thử lặp lại gần nhất đều phát hiện `HighCpuUsage`.
 - Detection time trung bình là 171 giây.
-- Resolve time trung bình là 32,5 giây.
+- Resolve time trung bình là 32 giây.
 - Một lần kiểm thử lịch sử không phát hiện trong 300 giây.
 - Kịch bản tạo tải 30 giây không kích hoạt cảnh báo. Điều này phù hợp với mục tiêu tránh cảnh báo do biến động ngắn, vì luật cảnh báo yêu cầu điều kiện duy trì trong 2 phút.
 
-Kết quả gần nhất đạt 2/2 lần, nhưng cần tiếp tục thử nghiệm nếu muốn đánh giá độ ổn định trong nhiều điều kiện tải khác nhau.
+Kết quả đợt kiểm thử lặp lại gần nhất đạt 3/3 lần. Tuy nhiên, vẫn cần tiếp tục thử nghiệm trong nhiều điều kiện tải khác nhau để đánh giá độ ổn định.
 
 ### 4.3. Khả năng phát hiện Disk Full
 
@@ -132,7 +133,7 @@ Các ngưỡng CPU 70/90%, RAM 80/90% và Disk 80/90% hiện là ngưỡng đề
 
 - Baseline mới được thu thập trong 18 giờ, chưa đại diện đầy đủ cho chu kỳ hoạt động 24 giờ hoặc tải dài hạn.
 - Chu kỳ lấy mẫu baseline là 60 giây nên có thể bỏ qua một số biến động ngắn.
-- Số lần kiểm thử lặp lại của CPU High hiện là 2; Service Down và Disk Full giả lập là 3.
+- Số lần kiểm thử lặp lại của CPU High và Disk Full giả lập hiện là 3; Service Down là 3.
 - Disk Full giả lập xác minh luồng cảnh báo qua metric Textfile Collector, không thay thế kiểm thử áp lực dung lượng trên filesystem root thật.
 - Một số log lịch sử ghi `RESOLVED` ngay sau `NOT_DETECTED` với thời gian 0 giây do cách ghi nhận của phiên bản script cũ. Những dòng này không được xem là bằng chứng cảnh báo đã phát hiện thành công.
 - Ngày 19/11 có một lần lỗi `textfile_metric_not_visible` trước khi hoàn tất điều chỉnh cách ghi metric. Đây là lỗi kỹ thuật trong quá trình chuẩn bị kiểm thử, không được tính vào ba lần kiểm thử Disk Full thành công.
@@ -146,7 +147,7 @@ Các lần kiểm thử lặp lại gần nhất ghi nhận:
 | Kịch bản | Kết quả | Detection trung bình | Resolve trung bình |
 |---|---:|---:|---:|
 | Service Down - vm-web | 3/3 | 64,67 giây | 31 giây |
-| CPU High - vm-web | 2/2 | 171 giây | 32,5 giây |
+| CPU High - vm-web | 3/3 | 171 giây | 32 giây |
 | Disk Full giả lập - vm-db | 3/3 | 88,33 giây | 34 giây |
 
 Kết quả chứng minh được luồng giám sát, phát hiện cảnh báo và khôi phục đối với ba kịch bản thử nghiệm. Trong đó, Disk Full giả lập đã được kiểm thử thành công sau khi điều chỉnh cơ chế tạo metric.

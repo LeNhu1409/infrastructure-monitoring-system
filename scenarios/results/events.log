@@ -95,3 +95,8 @@
 2026-11-19T19:36:00Z RECOVER scenario=disk_full vm=vm-db
 2026-11-19T19:36:28Z RESOLVED alert=DiskSpaceLowSimulated resolve_time=28s
 2026-11-19T19:36:28Z DONE scenario=disk_full vm=vm-db
+2026-11-21T20:37:24Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-21T20:40:15Z DETECTED alert=HighCpuUsage detection_time=171s
+2026-11-21T20:42:28Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-21T20:42:59Z RESOLVED alert=HighCpuUsage resolve_time=31s
+2026-11-21T20:42:59Z DONE scenario=cpu_high vm=vm-web
