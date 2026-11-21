@@ -8,7 +8,15 @@ Prototype quan sát (observability) trong môi trường lab kiểm soát: thu t
 
 ## Công nghệ
 
-`Prometheus`, `Grafana`, `Alertmanager`, `Node Exporter`, `cAdvisor`, `Blackbox Exporter`, `Docker Compose`.
+`Prometheus`, `Grafana`, `Alertmanager`, `Node Exporter`, `cAdvisor`, `Blackbox Exporter`, `Docker Compose`, `VirtualBox`, `Vagrant`.
+
+## Môi trường lab
+Hệ thống gồm 2 vùng triển khai
+1. **Đối tượng giám sát chính (VirtualBox + Vagrant):** 3 VM Ubuntu 22.04 trên mạng host-only `192.168.56.0/24`:
+   - `vm-web` (`192.168.56.11`): Nginx (`:80`), Node Exporter (`:9100`).
+   - `vm-db` (`192.168.56.12`): Redis (`:6379`), MariaDB (`:3306`), Node Exporter (`:9100`), Redis Exporter (`:9121`).
+   - `vm-app` (`192.168.56.13`): Python API (`:8000/health`, service `hkdn-api`), Node Exporter (`:9100`).
+2. **Monitoring stack (Docker Compose):** Chạy Prometheus, Grafana, Alertmanager, Blackbox Exporter cùng các target phụ trợ (`node-exporter` `lab-host-1`, `cAdvisor`, `demo-web`).
 
 ## Dựng lab trên máy sạch
 
@@ -19,18 +27,33 @@ Prototype quan sát (observability) trong môi trường lab kiểm soát: thu t
 - **Lưu ý cho Windows:** Bắt buộc bật WSL2 backend trong Docker Desktop và sử dụng cửa sổ dòng lệnh WSL (Ubuntu) hoặc Git Bash để chạy các script `.sh` trong thư mục `scenarious/`.
 
 ### 2. Các bước khởi chạy từ đầu
+**Bước 1 – Clone repo và tạo file biến môi trường**
 ```bash
 git clone <link-repo>
 cd infrastructure-monitoring-system
-cp .env.example .env        # đổi mật khẩu Grafana trong .env tại GRAFANA_ADMIN_PASSWORD
+cp .env.example .env     # đổi mật khẩu Grafana trong .env tại GRAFANA_ADMIN_PASSWORD
 docker compose up -d
 docker compose ps
+```
+
+**Bước 2 – Dựng cụm 3 VM Linux**
+```bash 
+cd vagrant
+vagrant up
+vagrant status  # kiểm tra cả 3 VM (vm-web, vm-db, vm-app) đều ở trạng thái running
+cd ..
+```
+
+**Bước 3 - Khởi chạy Monitoring stack bằng Docker Compose**
+```bash
+docker-compose up -d
+docker-compose ps
 ```
 ### 3. Kiểm tra trạng thái khi dựng lab
 | Dịch vụ | Địa chỉ | Cách kiểm tra hoạt động |
 |---|---|---|
-| Prometheus | http://localhost:9090 | Vào mục `Status` -> `Targets`, kiểm tra cả 4 job (`prometheus`, `node`, `cadvisor`, `blackbox-http`) đều hiện **UP** |
-| Grafana | http://localhost:3000 (tài khoản trong `.env`) | Đăng nhập bằng tài khoản trong `.env`, vào `Dashboards` -> thư mục `HKDN N4.7` -> mở **HKDN N4.7 - Host & Service Overview** |
+| Prometheus | http://localhost:9090 | Vào mục `Status` -> `Targets`, kiểm tra đủ 6 job (`prometheus`, `node` gồm `lab-host-1` và  `3 VM`, `redis`, `cadvisor`, `blackbox-http`, `blackbox-tcp`) đều hiện **UP** |
+| Grafana | http://localhost:3000 (tài khoản trong `.env`) | Đăng nhập bằng tài khoản trong `.env`, vào `Dashboards` -> thư mục `HKDN N4.7` -> mở **HKDN N4.7 - Host & Service Overview**, thử lọc theo biến Máy chủ, Dịch vụ, Mountpoint.  |
 | Alertmanager | http://localhost:9093 | Mở giao diện kiểm tra kết nối và danh sách cảnh báo đang kích hoạt |
 | cAdvisor | http://localhost:8080 | Xem chỉ số CPU, RAM của từng container đang chạy |
 | Demo web (đối tượng bị giám sát) | http://localhost:8081 | Hiển thị trang mặc định của Nginx (đối tượng mẫu bị giám sát HTTP) |
@@ -39,8 +62,19 @@ Sửa file cấu hình Prometheus (`config/prometheus.yml`, `config/alert.rules.
 
 Dừng lab: `docker compose down` (thêm `-v` để xóa dữ liệu metric đã lưu).
 
+
+### 4. Thao tác vận hành nhanh
+
+### 5. Xử lý lỗi thường gặp
+- Lỗi Hay tao file .env tu .env.example khi chạy docker compose up -d: Chưa tạo file `.env`. Chạy lại `cp .env.example .env` và kiểm tra biến `GRAFANA_ADMIN_PASSWORD` không bị để trống.
+- Lỗi trùng cổng (port is already allocated): Một ứng dụng khác trên máy đang dùng cổng 3000, 8080, 8081, 9090 hoặc 9093. Dừng ứng dụng đang chiếm cổng trước khi bật lab.
+- Lỗi `\r: command not found` khi chạy script `.sh` trên Windows: File bị chuyển sang định dạng xuống dòng CRLF. Chạy trên WSL/Git Bash hoặc chuyển về LF bằng `sed -i 's/\r$//' <ten-file.sh>`.
+  - Target của 3 VM hiển thị DOWN trong Prometheus: Kiểm tra *vagrant status* để chắc chắn 3 VM đang chạy và mạng host-only `192.168.56.0/24` không bị tường lửa máy host chặn.
+
+
 ## Cấu trúc thư mục
 
+*(Cập nhật sau)*
 ```
 ├── docker-compose.yml
 ├── .env.example
@@ -51,6 +85,12 @@ Dừng lab: `docker compose down` (thêm `-v` để xóa dữ liệu metric đã
 ├── docs/              # kiến trúc, runbook, mẫu biên bản họp, nhật ký góp ý PM
 └── reports/           # báo cáo tuần/tháng (nếu lưu trên repo)
 ```
+
+#### Tài liệu chính trong docs/:
+- Kiến trúc & baseline: `docs/architecture.md`, `docs/baseline_result.md`, `docs/nab_result.md`
+- Phân tích yêu cầu: `docs/requirements.md`
+- Hạ tầng VM & kiểm tra tích hợp: `docs/vm-environment.md`, `docs/integration_check.md`
+- Vận hành & trình diễn: `docs/runbook.md`, `docs/telegram-notification.md`, `docs/demo-script.md`
 
 ## Quy tắc làm việc
 
