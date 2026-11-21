@@ -1,23 +1,175 @@
 {
   "uid": "hkdn-host-service",
   "title": "HKDN N4.7 - Host & Service Overview",
-  "tags": ["hkdn", "n4.7"],
+  "tags": [
+    "hkdn",
+    "n4.7"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
-  "refresh": "10s",
-  "time": { "from": "now-1h", "to": "now" },
-  "templating": { "list": [] },
-  "annotations": { "list": [] },
+  "version": 2,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(up{job=\"node\"}, instance)",
+        "description": "Lọc các panel máy chủ theo nhãn instance.",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values(up{job=\"node\"}, instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "label": "Máy chủ"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(probe_success{job=\"blackbox-http\"}, service)",
+        "description": "Lọc trạng thái dịch vụ HTTP.",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values(probe_success{job=\"blackbox-http\"}, service)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "label": "Dịch vụ"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(container_memory_working_set_bytes{id!=\"\"}, id)",
+        "description": "cAdvisor của lab có nhãn id; nhãn name không có dữ liệu cho truy vấn đã kiểm tra.",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "name": "container",
+        "options": [],
+        "query": {
+          "query": "label_values(container_memory_working_set_bytes{id!=\"\"}, id)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "label": "Container (id)"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\"}, mountpoint)",
+        "description": "Chọn mountpoint cần theo dõi để tránh nhiều filesystem ảo.",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "name": "mountpoint",
+        "options": [],
+        "query": {
+          "query": "label_values(node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\"}, mountpoint)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query",
+        "label": "Mountpoint"
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Overview - Tổng quan",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
     {
       "id": 1,
       "type": "stat",
       "title": "Trạng thái dịch vụ",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
       "targets": [
-        { "refId": "A", "expr": "probe_success{job=\"blackbox-http\"}", "legendFormat": "{{service}}" }
+        {
+          "refId": "A",
+          "expr": "probe_success{job=\"blackbox-http\", service=~\"$service\"}",
+          "legendFormat": "{{service}}"
+        }
       ],
       "fieldConfig": {
         "defaults": {
@@ -25,189 +177,455 @@
             {
               "type": "value",
               "options": {
-                "0": { "text": "DOWN", "color": "red", "index": 0 },
-                "1": { "text": "UP", "color": "green", "index": 1 }
+                "0": {
+                  "text": "DOWN",
+                  "color": "red",
+                  "index": 0
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green",
+                  "index": 1
+                }
               }
             }
           ],
           "thresholds": {
             "mode": "absolute",
-            "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ]
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Kết quả kiểm tra HTTP qua Blackbox Exporter. Có thể lọc theo biến Dịch vụ."
     },
     {
       "id": 2,
       "type": "stat",
       "title": "Uptime máy chủ",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
       "targets": [
-        { "refId": "A", "expr": "time() - node_boot_time_seconds", "legendFormat": "{{instance}}" }
+        {
+          "refId": "A",
+          "expr": "time() - node_boot_time_seconds{instance=~\"$instance\"}",
+          "legendFormat": "{{instance}}"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
-      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Thời gian kể từ lần khởi động máy chủ gần nhất."
     },
     {
       "id": 3,
       "type": "stat",
       "title": "Cảnh báo đang firing",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
       "targets": [
-        { "refId": "A", "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)" }
+        {
+          "refId": "A",
+          "expr": "count(ALERTS{alertstate=\"firing\", instance=~\"$instance\"}) or vector(0)"
+        }
       ],
       "fieldConfig": {
         "defaults": {
           "thresholds": {
             "mode": "absolute",
-            "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ]
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
           }
         },
         "overrides": []
       },
-      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Số alert hiện đang firing. Hiển thị 0 khi không có alert firing."
     },
     {
       "id": 4,
       "type": "stat",
       "title": "Số target đang UP",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 18,
+        "y": 1,
+        "w": 6,
+        "h": 4
+      },
       "targets": [
-        { "refId": "A", "expr": "sum(up)" }
+        {
+          "refId": "A",
+          "expr": "sum(up{instance=~\"$instance\"}) or vector(0)"
+        }
       ],
-      "fieldConfig": { "defaults": {}, "overrides": [] },
-      "options": { "colorMode": "none", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "none",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "description": "Số target Prometheus đang UP theo bộ lọc máy chủ đã chọn."
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Host Monitoring - Giám sát máy chủ",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "panels": []
     },
     {
       "id": 5,
       "type": "timeseries",
       "title": "CPU sử dụng (%)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)",
+          "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\", instance=~\"$instance\"}[5m])) * 100)",
           "legendFormat": "{{instance}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "RAM sử dụng (%)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
+          "expr": "(1 - node_memory_MemAvailable_bytes{instance=~\"$instance\"} / node_memory_MemTotal_bytes{instance=~\"$instance\"}) * 100",
           "legendFormat": "{{instance}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      }
     },
     {
       "id": 7,
       "type": "timeseries",
       "title": "Disk sử dụng (%)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "(1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\"}) * 100",
+          "expr": "(1 - node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\", instance=~\"$instance\", mountpoint=~\"$mountpoint\"} / node_filesystem_size_bytes{fstype!~\"tmpfs|overlay|squashfs|ramfs|devtmpfs|fuse.*|nsfs\", instance=~\"$instance\", mountpoint=~\"$mountpoint\"}) * 100",
           "legendFormat": "{{mountpoint}}"
         },
         {
           "refId": "B",
-          "expr": "hkdn_sim_disk_used_percent",
+          "expr": "hkdn_sim_disk_used_percent{mountpoint=~\"$mountpoint\"}",
           "legendFormat": "giả lập {{mountpoint}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100
+        },
+        "overrides": []
+      },
+      "description": "Có thể xuất hiện nhiều mountpoint. Dùng bộ lọc Mountpoint để xem phân vùng cần theo dõi."
     },
     {
       "id": 8,
       "type": "timeseries",
       "title": "Network (byte/s)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
+          "expr": "sum by (instance) (rate(node_network_receive_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\", instance=~\"$instance\"}[5m]))",
           "legendFormat": "nhận {{instance}}"
         },
         {
           "refId": "B",
-          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\"}[1m]))",
+          "expr": "sum by (instance) (rate(node_network_transmit_bytes_total{device!~\"lo|veth.*|docker.*|br-.*\", instance=~\"$instance\"}[5m]))",
           "legendFormat": "gửi {{instance}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "Bps" }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Service & Container Monitoring - Dịch vụ và container",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "panels": []
     },
     {
       "id": 9,
       "type": "timeseries",
-      "title": "CPU theo container (%)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "title": "CPU theo container (% một lõi)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[1m])) * 100",
-          "legendFormat": "{{name}}"
+          "expr": "sum by (id) (rate(container_cpu_usage_seconds_total{id!=\"\", id=~\"$container\"}[5m])) * 100",
+          "legendFormat": "{{id}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "percent", "min": 0 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "description": "Tỷ lệ dùng CPU theo container. Có thể vượt 100% khi container dùng nhiều lõi. Truy vấn dùng nhãn id vì name!=\"\" từng trả 0 chuỗi."
     },
     {
       "id": 10,
       "type": "timeseries",
       "title": "RAM theo container",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 23,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (container_memory_working_set_bytes{name!=\"\"})",
-          "legendFormat": "{{name}}"
+          "expr": "sum by (id) (container_memory_working_set_bytes{id!=\"\", id=~\"$container\"})",
+          "legendFormat": "{{id}}"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "description": "Bộ nhớ working set theo nhãn id của cAdvisor; lọc bằng biến Container (id)."
+    },
+    {
+      "id": 104,
+      "type": "row",
+      "title": "Alert Monitoring - Giám sát cảnh báo",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "panels": []
     },
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Lịch sử cảnh báo (firing)",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "title": "Lịch sử cảnh báo - các khoảng firing",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (alertname) (ALERTS{alertstate=\"firing\"})",
-          "legendFormat": "{{alertname}}"
+          "expr": "ALERTS{alertstate=\"firing\", instance=~\"$instance\"}",
+          "legendFormat": "{{alertname}} - {{instance}}"
         }
       ],
-      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 }, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "description": "Hiển thị các khoảng firing còn lưu trong Prometheus cho phạm vi thời gian đã chọn. ALERTS{alertstate=\"firing\"} không lưu đầy đủ vòng đời pending/firing/resolved; biểu đồ có thể rỗng khi không có firing trong khoảng xem."
     },
     {
       "id": 12,
       "type": "table",
       "title": "Cảnh báo đang firing",
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
       "targets": [
-        { "refId": "A", "expr": "ALERTS{alertstate=\"firing\"}", "instant": true, "format": "table" }
+        {
+          "refId": "A",
+          "expr": "ALERTS{alertstate=\"firing\", instance=~\"$instance\"}",
+          "instant": true,
+          "format": "table"
+        }
       ],
-      "fieldConfig": { "defaults": {}, "overrides": [] }
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "description": "Danh sách alert đang firing ngay lúc này; bảng rỗng là bình thường khi không có alert firing."
     }
-  ]
+  ],
+  "editable": true,
+  "description": "Dashboard Grafana cho host và service trong lab N4.7. CPU/RAM container dùng nhãn id; đã xác minh trực tiếp trên Grafana: CPU/RAM container có dữ liệu (3/7 chuỗi)."
 }
