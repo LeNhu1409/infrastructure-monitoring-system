@@ -42,3 +42,34 @@ scrape_configs:
         target_label: instance
       - target_label: __address__
         replacement: blackbox-exporter:9115
+
+  - job_name: vm-web
+    static_configs:
+      - targets: ["192.168.56.11:9100"]
+        labels:
+          host: vm-web
+          role: web
+
+  # Thu thập metric hệ thống từ máy chủ vm-db.
+  - job_name: vm-db-node
+    static_configs:
+      - targets: ["192.168.56.12:9100"]
+        labels:
+          host: vm-db
+          role: database
+
+  # Thu thập metric Redis thông qua Redis Exporter.
+  - job_name: redis
+    static_configs:
+      - targets: ["192.168.56.12:9121"]
+        labels:
+          host: vm-db
+          service: redis
+
+  # Thu thập metric hệ thống từ máy chủ vm-app.
+  - job_name: vm-app
+    static_configs:
+      - targets: ["192.168.56.13:9100"]
+        labels:
+          host: vm-app
+          role: application
