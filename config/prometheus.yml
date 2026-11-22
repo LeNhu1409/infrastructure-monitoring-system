@@ -58,14 +58,6 @@ scrape_configs:
           host: vm-db
           role: database
 
-  # Thu thập metric Redis thông qua Redis Exporter.
-  - job_name: redis
-    static_configs:
-      - targets: ["192.168.56.12:9121"]
-        labels:
-          host: vm-db
-          service: redis
-
   # Thu thập metric hệ thống từ máy chủ vm-app.
   - job_name: vm-app
     static_configs:
