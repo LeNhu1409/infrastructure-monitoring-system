@@ -163,3 +163,31 @@ Tuy nhiên, cần phân biệt kết quả mô phỏng với kiểm thử trên 
 - Dashboard: `dashboards/host-service-overview.json`.
 - Kiến trúc hệ thống: `docs/architecture.md`.
 - Ảnh Grafana và Alertmanager: bổ sung khi hoàn thiện bộ minh chứng.
+
+## 7. Kiểm thử TCP Service Down - Redis và MariaDB
+
+Ngày kiểm thử: 26/11/2026.
+
+Mục tiêu: xác minh `ServiceDown` phát hiện được dịch vụ TCP Redis và MariaDB khi ngừng hoạt động, đồng thời tự khôi phục trạng thái cảnh báo khi dịch vụ hoạt động trở lại.
+
+### 7.1. Redis
+
+- Máy kiểm thử: `vm-db` (`192.168.56.12`).
+- Dịch vụ: Redis (`192.168.56.12:6379`).
+- Thao tác: dừng dịch vụ `redis-server`.
+- Kết quả: `probe_success` chuyển thành `0`; cảnh báo `ServiceDown` chuyển từ `pending` sang `firing`, mức độ `critical`.
+- Khôi phục: khởi động lại Redis; `probe_success` trở về `1` và cảnh báo không còn ở trạng thái `firing`.
+
+### 7.2. MariaDB
+
+- Máy kiểm thử: `vm-db` (`192.168.56.12`).
+- Dịch vụ: MariaDB (`192.168.56.12:3306`).
+- Thao tác: dừng dịch vụ `mariadb`.
+- Kết quả: `probe_success` chuyển thành `0`; cảnh báo `ServiceDown` chuyển từ `pending` sang `firing`, mức độ `critical`.
+- Khôi phục: khởi động lại MariaDB; `probe_success` trở về `1` và cảnh báo không còn ở trạng thái `firing`.
+
+### 7.3. Đánh giá
+
+Cả Redis và MariaDB đều được phát hiện khi mất kết nối TCP và cảnh báo được giải quyết sau khi dịch vụ khôi phục. Kết quả xác nhận luật `ServiceDown` hiện hỗ trợ cả HTTP probe và TCP probe.
+
+Lưu ý: lần kiểm thử này xác nhận trạng thái phát hiện và khôi phục; chưa ghi nhận thời gian phát hiện thực tế bằng phép đo riêng.

@@ -13,15 +13,15 @@ groups:
           summary: "Mất kết nối metric của {{ $labels.instance }}"
           description: "Prometheus không scrape được {{ $labels.instance }} trong hơn 1 phút."
 
-      # Cảnh báo khi HTTP probe thất bại.
+            # Cảnh báo khi HTTP hoặc TCP probe thất bại.
       - alert: ServiceDown
-        expr: probe_success{job="blackbox-http"} == 0
+        expr: probe_success{job=~"blackbox-(http|tcp)"} == 0
         for: 30s
         labels:
           severity: critical
         annotations:
           summary: "Dịch vụ {{ $labels.service }} không phản hồi"
-          description: "Kiểm tra HTTP tới {{ $labels.instance }} thất bại trong hơn 30 giây."
+          description: "Kiểm tra kết nối tới {{ $labels.instance }} thất bại trong hơn 30 giây."
 
   # Các luật giám sát tài nguyên.
   # Ngưỡng tạm thời dựa trên baseline 18 giờ,

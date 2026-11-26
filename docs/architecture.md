@@ -69,7 +69,7 @@ Cấu hình hiện tại có **9 rule** trong `config/alert.rules.yml`:
 | Alert | Điều kiện | `for:` | Phạm vi |
 |---|---|---:|---|
 | `NodeExporterDown` | `up{job="node",host=~"vm-web\|vm-db\|vm-app"} == 0` | 1m | Node Exporter của 3 VM |
-| `ServiceDown` | `probe_success{job="blackbox-http"} == 0` | 30s | HTTP probe |
+| `ServiceDown` | `probe_success{job=~"blackbox-(http|tcp)"} == 0` | 30s | HTTP probe và TCP probe (Redis, MariaDB) |
 | `HighCpuUsage` – warning | CPU > 70% | 2m | 3 VM |
 | `HighCpuUsage` – critical | CPU > 90% | 2m | 3 VM |
 | `HighMemoryUsage` – warning | RAM > 80% | 5m | 3 VM |
@@ -80,7 +80,7 @@ Cấu hình hiện tại có **9 rule** trong `config/alert.rules.yml`:
 
 Các ngưỡng CPU 70/90%, RAM 80/90% và Disk 80/90% là ngưỡng đề xuất đang dùng trong prototype, chưa phải ngưỡng production hoặc ngưỡng đã được mentor phê duyệt. Baseline thấp không tự nó chứng minh các ngưỡng này là tối ưu; cần tiếp tục kiểm thử và xin xác nhận.
 
-**Phạm vi cảnh báo dịch vụ:** `ServiceDown` hiện chỉ xét `job="blackbox-http"`. Redis/MariaDB có TCP probe trong Prometheus nhưng hiện chưa được luật `ServiceDown` bao phủ. `NodeExporterDown` hiện lọc ba VM, không áp dụng cho target `lab-host-1`.
+**Phạm vi cảnh báo dịch vụ:** `ServiceDown` xét cả `job="blackbox-http"` và `job="blackbox-tcp"`, bao gồm demo-web, Nginx, API, Redis và MariaDB. Kiểm thử TCP trên Redis và MariaDB đã xác nhận cảnh báo chuyển sang `firing` khi dịch vụ ngừng hoạt động và được giải quyết khi kết nối khôi phục. `NodeExporterDown` hiện lọc ba VM, không áp dụng cho target `lab-host-1`.
 
 ## 6. Kịch bản lỗi
 
@@ -90,7 +90,7 @@ Các kịch bản VM nằm trong `scenarios/vm/`; kịch bản Docker nằm tron
 |---|---|---|---|
 | CPU High | Chạy `stress-ng` trên `vm-web` | `HighCpuUsage` | Script xác nhận stress-ng chạy rồi mới bắt đầu tính detection time |
 | Disk Full giả lập | Tạo filesystem loop 200 MB trên `vm-db`, ghi dữ liệu khoảng 92%, xuất `hkdn_sim_disk_used_percent` qua Textfile Collector | `DiskSpaceLowSimulated` | Không làm đầy root filesystem; không phải kiểm thử thành công `DiskSpaceLow` |
-| Service Down | Dừng Nginx trên `vm-web` hoặc `hkdn-api` trên `vm-app` | `ServiceDown` | HTTP probe thất bại |
+| Service Down | Dừng Nginx trên `vm-web`, `hkdn-api` trên `vm-app`, Redis hoặc MariaDB trên `vm-db` | `ServiceDown` | HTTP/TCP probe thất bại |
 | CPU spike ngắn | Chạy tải CPU 30 giây | Không được chuyển `HighCpuUsage` sang `firing` | Điều kiện ngắn hơn `for: 2m` |
 
 ### Phương pháp đo detection/resolve time
@@ -157,7 +157,7 @@ Baseline hiện tại được thu thập trên ba Linux VM, không phải basel
 | RAM | 80% | 90% | 5m | Ngưỡng đề xuất |
 | Disk root | 80% | 90% | 5m | Chỉ mountpoint `/`, fstype ext4 |
 | Disk giả lập | >80% | – | 1m | Dùng metric mô phỏng để demo |
-| ServiceDown | probe_success = 0 | – | 30s | Chỉ HTTP |
+| ServiceDown | `probe_success{job=~"blackbox-(http|tcp)"} == 0` | – | 30s | HTTP và TCP (Redis, MariaDB) |
 | NodeExporterDown | up = 0 | – | 1m | Chỉ ba VM |
 
 Baseline 18 giờ cho thấy tài nguyên ở trạng thái lab tương đối ổn định, nhưng chưa đại diện cho chu kỳ dài hạn. Step 60 giây có thể bỏ qua biến động ngắn. Các ngưỡng trên không được tính trực tiếp từ p95/p99; đây là ngưỡng đề xuất để thử nghiệm và cần mentor xác nhận.
@@ -194,7 +194,7 @@ NAB chỉ dùng để kiểm chứng phương pháp, không dùng số của NAB
 - Lab chạy trên một host, chưa có HA.
 - cAdvisor trên Docker Desktop có thể không cung cấp đầy đủ metric container; cần xem đây là phần phụ trợ.
 - `DiskSpaceLowSimulated` không thay thế kiểm thử `DiskSpaceLow` trên root filesystem thật.
-- `ServiceDown` hiện chỉ xét HTTP, chưa cảnh báo TCP Redis/MariaDB.
+- Kiểm thử TCP Redis/MariaDB mới xác nhận khả năng phát hiện và khôi phục; chưa đo detection time riêng cho hai dịch vụ.
 - Alertmanager chưa gửi email/chat ra ngoài.
 - Chưa kết nối hệ thống NOC/DCIM thật và không sử dụng credential production.
 
