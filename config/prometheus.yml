@@ -69,9 +69,10 @@ scrape_configs:
       - target_label: __address__
         replacement: blackbox-exporter:9115
 
-  # Kiểm tra cổng TCP qua Blackbox Exporter (Redis trên vm-db).
-  # Lưu ý: luật ServiceDown hiện chỉ xét job="blackbox-http"; muốn cảnh báo cả TCP,
-  # đổi thành probe_success{job=~"blackbox-.*"} == 0 trong config/alert.rules.yml.
+  # Kiểm tra cổng TCP qua Blackbox Exporter (Redis và MariaDB trên vm-db).
+  # Lưu ý: luật ServiceDown hiện chỉ xét job="blackbox-http"; muốn
+  # cảnh báo cả TCP, đổi thành probe_success{job=~"blackbox-.*"} == 0 trong
+  # config/alert.rules.yml.
   - job_name: blackbox-tcp
     metrics_path: /probe
     params:
