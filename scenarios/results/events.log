@@ -1,0 +1,102 @@
+2026-11-06T08:36:40Z INJECT scenario=service_down container=hkdn-demo-web duration=120s
+2026-11-07T17:46:24Z INJECT scenario=service_down container=hkdn-demo-web duration=120s
+2026-11-07T17:47:27Z DETECTED alert=ServiceDown detection_time=62s
+2026-11-07T17:48:25Z RECOVER scenario=service_down
+2026-11-07T17:48:43Z RESOLVED alert=ServiceDown resolve_time=18s
+2026-11-07T17:48:43Z DONE scenario=service_down
+2026-11-07T17:50:04Z INJECT scenario=disk_full mode=textfile duration=300s
+2026-11-07T17:51:29Z DETECTED alert=DiskSpaceLowSimulated detection_time=85s
+2026-11-07T17:55:04Z RECOVER scenario=disk_full mode=textfile
+2026-11-07T17:55:30Z RESOLVED alert=DiskSpaceLowSimulated resolve_time=26s
+2026-11-07T17:55:30Z DONE scenario=disk_full mode=textfile
+2026-11-07T17:56:15Z INJECT scenario=cpu_high duration=300s cores=16
+2026-11-07T17:59:16Z DETECTED alert=HighCpuUsage detection_time=176s
+2026-11-07T18:01:21Z RECOVER scenario=cpu_high
+2026-11-07T18:01:45Z RESOLVED alert=HighCpuUsage resolve_time=24s
+2026-11-07T18:01:45Z DONE scenario=cpu_high
+2026-11-07T18:03:51Z INJECT scenario=cpu_high duration=30s cores=16
+2026-11-07T18:04:21Z NOT_DETECTED alert=HighCpuUsage within 30s
+2026-11-07T18:04:22Z RECOVER scenario=cpu_high
+2026-11-07T18:04:22Z RESOLVED alert=HighCpuUsage resolve_time=0s
+2026-11-07T18:04:22Z DONE scenario=cpu_high
+2026-11-11T09:31:35Z INJECT scenario=service_down vm=vm-web service=nginx duration=120s
+2026-11-11T09:32:42Z DETECTED alert=ServiceDown detection_time=64s
+2026-11-11T09:33:42Z RECOVER scenario=service_down vm=vm-web
+2026-11-11T09:34:12Z RESOLVED alert=ServiceDown resolve_time=30s
+2026-11-11T09:34:12Z DONE scenario=service_down vm=vm-web
+2026-11-11T09:50:16Z INJECT scenario=disk_full vm=vm-db duration=420s
+2026-11-11T09:57:21Z NOT_DETECTED alert=DiskSpaceLow within 420s
+2026-11-11T09:57:25Z RECOVER scenario=disk_full vm=vm-db
+2026-11-11T09:57:25Z RESOLVED alert=DiskSpaceLow resolve_time=0s
+2026-11-11T09:57:25Z DONE scenario=disk_full vm=vm-db
+2026-11-11T13:28:11Z INJECT scenario=disk_full vm=vm-db duration=420s
+2026-11-11T13:33:44Z DETECTED alert=DiskSpaceLow detection_time=329s
+2026-11-11T13:35:19Z RECOVER scenario=disk_full vm=vm-db
+2026-11-11T13:35:58Z RESOLVED alert=DiskSpaceLow resolve_time=39s
+2026-11-11T13:35:58Z DONE scenario=disk_full vm=vm-db
+2026-11-11T13:43:06Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-11T13:48:11Z NOT_DETECTED alert=HighCpuUsage within 300s
+2026-11-11T13:48:15Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-11T13:48:15Z RESOLVED alert=HighCpuUsage resolve_time=0s
+2026-11-11T13:48:15Z DONE scenario=cpu_high vm=vm-web
+2026-11-11T14:15:45Z INJECT scenario=cpu_high vm=vm-web duration=30s
+2026-11-11T14:16:19Z NOT_DETECTED alert=HighCpuUsage within 30s
+2026-11-11T14:16:23Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-11T14:16:23Z RESOLVED alert=HighCpuUsage resolve_time=0s
+2026-11-11T14:16:23Z DONE scenario=cpu_high vm=vm-web
+2026-11-12T00:03:33Z INJECT scenario=service_down vm=vm-app service=hkdn-api duration=120s
+2026-11-12T00:04:28Z DETECTED alert=ServiceDown detection_time=51s
+2026-11-12T00:05:39Z RECOVER scenario=service_down vm=vm-app
+2026-11-12T00:06:12Z RESOLVED alert=ServiceDown resolve_time=33s
+2026-11-12T00:06:12Z DONE scenario=service_down vm=vm-app
+2026-11-12T00:08:02Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-12T00:11:00Z DETECTED alert=HighCpuUsage detection_time=167s
+2026-11-12T00:13:17Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-12T00:13:44Z RESOLVED alert=HighCpuUsage resolve_time=27s
+2026-11-12T00:13:44Z DONE scenario=cpu_high vm=vm-web
+2026-11-19T15:48:39Z INJECT scenario=service_down vm=vm-web service=nginx duration=120s
+2026-11-19T15:49:42Z DETECTED alert=ServiceDown detection_time=63s
+2026-11-19T15:50:43Z RECOVER scenario=service_down vm=vm-web
+2026-11-19T15:51:13Z RESOLVED alert=ServiceDown resolve_time=30s
+2026-11-19T15:51:13Z DONE scenario=service_down vm=vm-web
+2026-11-19T16:16:06Z INJECT scenario=service_down vm=vm-web service=nginx duration=120s
+2026-11-19T16:17:12Z DETECTED alert=ServiceDown detection_time=66s
+2026-11-19T16:18:10Z RECOVER scenario=service_down vm=vm-web
+2026-11-19T16:18:43Z RESOLVED alert=ServiceDown resolve_time=33s
+2026-11-19T16:18:43Z DONE scenario=service_down vm=vm-web
+2026-11-19T16:24:37Z INJECT scenario=service_down vm=vm-web service=nginx duration=120s
+2026-11-19T16:25:42Z DETECTED alert=ServiceDown detection_time=65s
+2026-11-19T16:26:41Z RECOVER scenario=service_down vm=vm-web
+2026-11-19T16:27:11Z RESOLVED alert=ServiceDown resolve_time=30s
+2026-11-19T16:27:11Z DONE scenario=service_down vm=vm-web
+2026-11-19T16:31:25Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-19T16:34:14Z DETECTED alert=HighCpuUsage detection_time=169s
+2026-11-19T16:36:30Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-19T16:37:00Z RESOLVED alert=HighCpuUsage resolve_time=30s
+2026-11-19T16:37:00Z DONE scenario=cpu_high vm=vm-web
+2026-11-19T16:39:21Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-19T16:42:14Z DETECTED alert=HighCpuUsage detection_time=173s
+2026-11-19T16:44:25Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-19T16:45:00Z RESOLVED alert=HighCpuUsage resolve_time=35s
+2026-11-19T16:45:00Z DONE scenario=cpu_high vm=vm-web
+2026-11-19T19:01:50Z ERROR textfile_metric_not_visible vm=vm-db
+2026-11-19T19:09:02Z INJECT scenario=disk_full vm=vm-db mountpoint=/mnt/hkdn-small-disk duration=420s
+2026-11-19T19:10:29Z DETECTED alert=DiskSpaceLowSimulated detection_time=87s
+2026-11-19T19:16:06Z RECOVER scenario=disk_full vm=vm-db
+2026-11-19T19:16:44Z RESOLVED alert=DiskSpaceLowSimulated resolve_time=38s
+2026-11-19T19:16:44Z DONE scenario=disk_full vm=vm-db
+2026-11-19T19:19:19Z INJECT scenario=disk_full vm=vm-db mountpoint=/mnt/hkdn-small-disk duration=180s
+2026-11-19T19:20:43Z DETECTED alert=DiskSpaceLowSimulated detection_time=84s
+2026-11-19T19:22:23Z RECOVER scenario=disk_full vm=vm-db
+2026-11-19T19:22:59Z RESOLVED alert=DiskSpaceLowSimulated resolve_time=36s
+2026-11-19T19:22:59Z DONE scenario=disk_full vm=vm-db
+2026-11-19T19:32:55Z INJECT scenario=disk_full vm=vm-db mountpoint=/mnt/hkdn-small-disk duration=180s
+2026-11-19T19:34:29Z DETECTED alert=DiskSpaceLowSimulated detection_time=94s
+2026-11-19T19:36:00Z RECOVER scenario=disk_full vm=vm-db
+2026-11-19T19:36:28Z RESOLVED alert=DiskSpaceLowSimulated resolve_time=28s
+2026-11-19T19:36:28Z DONE scenario=disk_full vm=vm-db
+2026-11-21T20:37:24Z INJECT scenario=cpu_high vm=vm-web duration=300s
+2026-11-21T20:40:15Z DETECTED alert=HighCpuUsage detection_time=171s
+2026-11-21T20:42:28Z RECOVER scenario=cpu_high vm=vm-web
+2026-11-21T20:42:59Z RESOLVED alert=HighCpuUsage resolve_time=31s
+2026-11-21T20:42:59Z DONE scenario=cpu_high vm=vm-web
