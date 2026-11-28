@@ -4,11 +4,11 @@
 
 Nhóm 11 – Học kỳ doanh nghiệp UTH – VNPT NET (01/11/2026 – 06/03/2027)
 
-Prototype quan sát (observability) trong môi trường lab kiểm soát: thu thập metric, dashboard, cảnh báo ngưỡng và mô phỏng lỗi. Không thay thế NOC/DCIM chính thức.
+Prototype quan sát (observability) trong môi trường lab kiểm soát: thu thập metric, dashboard, cảnh báo ngưỡng và mô phỏng lỗi. Đây là mô hình nhiều máy chủ phục vụ thử nghiệm giám sát, không phải mô phỏng đầy đủ nền tảng Cloud hay thay thế NOC/DCIM trung tâm dữ liệu thực tế.
 
 ## Công nghệ
 
-`Prometheus`, `Grafana`, `Alertmanager`, `Node Exporter`, `cAdvisor`, `Blackbox Exporter`, `Docker Compose`, `VirtualBox`, `Vagrant`.
+`Prometheus`, `Grafana`, `Alertmanager`, `Node Exporter`, `Redis Exporter`, `cAdvisor`, `Blackbox Exporter`, `Docker Compose`, `VirtualBox`, `Vagrant`.
 
 ## Môi trường lab
 Hệ thống gồm 2 vùng triển khai
@@ -18,13 +18,40 @@ Hệ thống gồm 2 vùng triển khai
    - `vm-app` (`192.168.56.13`): Python API (`:8000/health`, service `hkdn-api`), Node Exporter (`:9100`).
 2. **Monitoring stack (Docker Compose):** Chạy Prometheus, Grafana, Alertmanager, Blackbox Exporter cùng các target phụ trợ (`node-exporter` `lab-host-1`, `cAdvisor`, `demo-web`).
 
+## Cổng dịch vụ và Phụ thuộc khởi chạy
+
+### Danh sách cổng sử dụng
+
+| Vùng triển khai | Thành phần / Host | Cổng | Phạm vi truy cập | Vai trò |
+| :--- | :--- | :---: | :--- | :--- |
+| Docker Compose | `hkdn-grafana` | `3000` | Host (`localhost:3000`) | Giao diện Dashboard & lịch sử cảnh báo |
+| Docker Compose | `hkdn-cadvisor` | `8080` | Host (`localhost:8080`) | Metric tài nguyên container (phụ trợ) |
+| Docker Compose | `hkdn-demo-web` | `8081` → `80` | Host (`localhost:8081`) | Dịch vụ Nginx mẫu trong Docker (phụ trợ) |
+| Docker Compose | `hkdn-prometheus` | `9090` | Host (`localhost:9090`) | Thu thập metric, truy vấn PromQL, đánh giá luật |
+| Docker Compose | `hkdn-alertmanager` | `9093` | Host (`localhost:9093`) | Gom nhóm, ức chế (`inhibit`), tạm ẩn cảnh báo |
+| Docker Compose | `hkdn-node-exporter` | `9100` | Nội bộ Docker | Metric Docker Desktop (`lab-host-1`, phụ trợ) |
+| Docker Compose | `hkdn-blackbox` | `9115` | Nội bộ Docker | Probe HTTP (`http_2xx`) và TCP (`tcp_connect`) |
+| 3 VM Vagrant | `vm-web` (`192.168.56.11`) | `80`, `9100` | Mạng `192.168.56.0/24` | Nginx & Node Exporter |
+| 3 VM Vagrant | `vm-db` (`192.168.56.12`) | `6379`, `3306`, `9100`, `9121` | Mạng `192.168.56.0/24` | Redis, MariaDB, Node Exporter & Redis Exporter |
+| 3 VM Vagrant | `vm-app` (`192.168.56.13`) | `8000`, `9100` | Mạng `192.168.56.0/24` | Python API (`hkdn-api`) & Node Exporter |
+
+### Thứ tự phụ thuộc khi triển khai
+
+1. **Tầng hạ tầng VM chạy trước:** 3 VM Ubuntu (`vm-web`, `vm-db`, `vm-app`) cần được khởi chạy qua Vagrant trước để mở mạng host-only `192.168.56.0/24` và phơi bày các cổng exporter/dịch vụ.
+2. **Tầng Monitoring Stack (Docker Compose) chạy sau:**
+   - Yêu cầu file `.env` (tạo từ `.env.example`) chứa biến `GRAFANA_ADMIN_PASSWORD`.
+   - Phụ thuộc giữa các container: `prometheus` phụ thuộc `alertmanager`; `grafana` phụ thuộc `prometheus` (tự động nạp datasource và dashboard từ `grafana/provisioning/` và `dashboards/`).
+ 
+
+
 ## Dựng lab trên máy sạch
 
 ### 1. Yêu cầu môi trường
-- Máy tính cá nhân hoặc VM có RAM từ 8GB.
-- Đã cài đặt Docker và Docker Compose.
-- Đã cài đặt `git` và `curl`.
-- **Lưu ý cho Windows:** Bắt buộc bật WSL2 backend trong Docker Desktop và sử dụng cửa sổ dòng lệnh WSL (Ubuntu) hoặc Git Bash để chạy các script `.sh` trong thư mục `scenarious/`.
+- Máy tính cá nhân có RAM từ **8–16 GB** (khuyến nghị 16 GB khi chạy đồng thời 3 VM và Docker Desktop).
+- Đã cài đặt **Docker** và **Docker Compose**.
+- Đã cài đặt **VirtualBox** và **Vagrant** (để dựng cụm 3 VM Linux; xem chi tiết tại `docs/vm-environment.md`).
+- Đã cài đặt `git` và `curl` (cần thêm `python3` nếu chạy các công cụ trong `tools/`).
+- **Lưu ý cho Windows:** Bật WSL2 backend trong Docker Desktop và dùng WSL (Ubuntu) hoặc Git Bash để chạy các script `.sh` trong thư mục `scenarios/`.
 
 ### 2. Các bước khởi chạy từ đầu
 **Bước 1 – Clone repo và tạo file biến môi trường**
@@ -58,18 +85,27 @@ docker-compose ps
 | cAdvisor | http://localhost:8080 | Xem chỉ số CPU, RAM của từng container đang chạy |
 | Demo web (đối tượng bị giám sát) | http://localhost:8081 | Hiển thị trang mặc định của Nginx (đối tượng mẫu bị giám sát HTTP) |
 
-Sửa file cấu hình Prometheus (`config/prometheus.yml`, `config/alert.rules.yml`) xong thì chạy `docker compose restart prometheus` để nạp lại.
 
 Dừng lab: `docker compose down` (thêm `-v` để xóa dữ liệu metric đã lưu).
 
 
 ### 4. Thao tác vận hành nhanh
+- **Nạp lại cấu hình Prometheus** sau khi sửa `config/prometheus.yml` hoặc `config/alert.rules.yml`:
+  ```bash
+  docker compose restart prometheus
+  ```
+- **Bật cảnh báo Telegram (tùy chọn):** Thực hiện theo hướng dẫn tại `docs/telegram-notification.md` (lưu token cục bộ trong `secrets/`, không commit lên Git).
+- **Dừng toàn bộ lab:**
+  ```bash
+  docker compose down          # thêm -v nếu muốn xóa dữ liệu metric đã lưu
+  cd vagrant && vagrant halt   # tắt 3 VM Linux
+  ```
 
 ### 5. Xử lý lỗi thường gặp
 - Lỗi Hay tao file .env tu .env.example khi chạy docker compose up -d: Chưa tạo file `.env`. Chạy lại `cp .env.example .env` và kiểm tra biến `GRAFANA_ADMIN_PASSWORD` không bị để trống.
 - Lỗi trùng cổng (port is already allocated): Một ứng dụng khác trên máy đang dùng cổng 3000, 8080, 8081, 9090 hoặc 9093. Dừng ứng dụng đang chiếm cổng trước khi bật lab.
 - Lỗi `\r: command not found` khi chạy script `.sh` trên Windows: File bị chuyển sang định dạng xuống dòng CRLF. Chạy trên WSL/Git Bash hoặc chuyển về LF bằng `sed -i 's/\r$//' <ten-file.sh>`.
-  - Target của 3 VM hiển thị DOWN trong Prometheus: Kiểm tra *vagrant status* để chắc chắn 3 VM đang chạy và mạng host-only `192.168.56.0/24` không bị tường lửa máy host chặn.
+- Target của 3 VM hiển thị DOWN trong Prometheus: Kiểm tra *vagrant status* để chắc chắn 3 VM đang chạy và mạng host-only `192.168.56.0/24` không bị tường lửa máy host chặn.
 
 
 ## Cấu trúc thư mục
@@ -87,10 +123,9 @@ Dừng lab: `docker compose down` (thêm `-v` để xóa dữ liệu metric đã
 ```
 
 #### Tài liệu chính trong docs/:
-- Kiến trúc & baseline: `docs/architecture.md`, `docs/baseline_result.md`, `docs/nab_result.md`
-- Phân tích yêu cầu: `docs/requirements.md`
-- Hạ tầng VM & kiểm tra tích hợp: `docs/vm-environment.md`, `docs/integration_check.md`
-- Vận hành & trình diễn: `docs/runbook.md`, `docs/telegram-notification.md`, `docs/demo-script.md`
+- Phân tích & thiết kế: `docs/requirements.md`, `docs/architecture.md`, `docs/baseline_result.md`, `docs/nab_result.md`
+- Triển khai & vận hành: `docs/vm-environment.md`, `docs/runbook.md`, `docs/telegram-notification.md`
+- Kiểm thử & demo: `docs/integration_check.md`, `docs/demo-script.md`
 
 ## Quy tắc làm việc
 
